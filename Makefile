@@ -158,11 +158,11 @@ sysconfdir ?= /etc
 install: radio_daemon sbitx_client
 	install -D -m 755 radio_daemon  $(DESTDIR)$(prefix)/bin/radio_daemon
 	install -D -m 755 sbitx_client  $(DESTDIR)$(prefix)/bin/sbitx_client
-	install -d $(DESTDIR)$(sysconfdir)/hermes
-	test -f $(DESTDIR)$(sysconfdir)/hermes/radio.ini || \
-	  install -m 644 config/radio.ini $(DESTDIR)$(sysconfdir)/hermes/radio.ini
-	test -f $(DESTDIR)$(sysconfdir)/hermes/user.ini || \
-	  install -m 644 config/user.ini $(DESTDIR)$(sysconfdir)/hermes/user.ini
+	install -d $(DESTDIR)$(sysconfdir)/sbitx
+	test -f $(DESTDIR)$(sysconfdir)/sbitx/core.ini || \
+	  install -m 644 config/core.ini $(DESTDIR)$(sysconfdir)/sbitx/core.ini
+	test -f $(DESTDIR)$(sysconfdir)/sbitx/user.ini || \
+	  install -m 644 config/user.ini $(DESTDIR)$(sysconfdir)/sbitx/user.ini
 
 # ── clean ───────────────────────────────────────────────────────
 clean:

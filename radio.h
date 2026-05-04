@@ -23,8 +23,8 @@
 #ifndef RADIO_H_
 #define RADIO_H_
 
-#define CFG_RADIO_PATH "/etc/hermes/radio.ini"
-#define CFG_USER_PATH  "/etc/hermes/user.ini"
+#define CFG_RADIO_PATH "/etc/sbitx/core.ini"
+#define CFG_USER_PATH "/etc/sbitx/user.ini"
 
 #include <stdbool.h>
 #include <stdint.h>

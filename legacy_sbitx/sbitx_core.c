@@ -46,8 +46,23 @@ extern _Atomic bool rx_starting;
 _Atomic bool timer_reset = true; // TODO: move me to global
 _Atomic time_t timeout_counter = 0;
 
+void radio_apply_defaults(radio *radio_h)
+{
+    if (radio_h->hw_profile == HW_PROFILE_UNKNOWN)
+        radio_h->hw_profile = HW_PROFILE_SBITX;
+
+    if (!radio_h->bfo_frequency)
+        radio_h->bfo_frequency = radio_is_zbitx(radio_h) ? ZBITX_BFO_FREQUENCY : SBITX_BFO_FREQUENCY;
+}
+
+bool radio_is_zbitx(const radio *radio_h)
+{
+    return radio_h->hw_profile == HW_PROFILE_ZBITX;
+}
+
 bool hw_init(radio *radio_h, pthread_t *hw_tids)
 {
+    radio_apply_defaults(radio_h);
     // I2C SETUP
     i2c_open(radio_h);
 
@@ -408,6 +423,8 @@ void lpf_off(radio *radio_h)
     set_drive(LPF_B, DRIVE_LOW);
     set_drive(LPF_C, DRIVE_LOW);
     set_drive(LPF_D, DRIVE_LOW);
+    if (radio_is_zbitx(radio_h))
+        set_drive(ZBITX_LPF_E, DRIVE_LOW);
 }
 
 void lpf_set(radio *radio_h)
@@ -425,7 +442,8 @@ void lpf_set(radio *radio_h)
     else if (*radio_freq < 35000000)
         lpf = LPF_A;
 
-    set_drive(lpf, DRIVE_HIGH);
+    if (lpf)
+        set_drive(lpf, DRIVE_HIGH);
 }
 
 void swr_protection_check(radio *radio_h)
@@ -471,6 +489,11 @@ void tr_switch(radio *radio_h, bool txrx_state)
         set_speaker_level(0);
         set_tx_level(radio_h->profiles[radio_h->profile_active_idx].tx_level);
 
+        if (radio_is_zbitx(radio_h))
+        {
+            set_drive(ZBITX_RX_LINE, DRIVE_LOW);
+            usleep(2000);
+        }
         lpf_off(radio_h);
         usleep(2000);
         set_drive(TX_LINE, DRIVE_HIGH);
@@ -503,7 +526,10 @@ void tr_switch(radio *radio_h, bool txrx_state)
         usleep(1000);
         set_drive(TX_LINE, DRIVE_LOW);
         usleep(1000);
-        lpf_set(radio_h);
+        if (radio_is_zbitx(radio_h))
+            set_drive(ZBITX_RX_LINE, DRIVE_HIGH);
+        else
+            lpf_set(radio_h);
 
         rx_starting = true;
         radio_h->txrx_state = IN_RX;

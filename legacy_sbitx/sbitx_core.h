@@ -58,6 +58,12 @@
 #define LPF_C     8 // Pin 24
 #define LPF_D     7 // Pin 26
 
+#define ZBITX_RX_LINE  15 // Pin 10
+#define ZBITX_LPF_E    12 // Pin 32
+
+#define SBITX_BFO_FREQUENCY 40035000U
+#define ZBITX_BFO_FREQUENCY 40048000U
+
 /* Internal software modes listing */
 #define OPERATING_MODE_FULL_VOICE 0 // IO+ALSA+DSP, radio tx comes from MIC
 #define OPERATING_MODE_FULL_LOOPBACK 1 // IO+ALSA+DSP, radio tx comes from Alsa loopback
@@ -112,6 +118,13 @@ typedef struct {
 	double scale;
 } power_settings;
 
+typedef enum
+{
+    HW_PROFILE_UNKNOWN = 0,
+    HW_PROFILE_SBITX,
+    HW_PROFILE_ZBITX,
+} hw_profile_t;
+
 // variables without _Atomic are not supposed to change during runtime after config file loads
 typedef struct {
 
@@ -162,6 +175,7 @@ typedef struct
 
     // Radio status
     _Atomic uint32_t bfo_frequency;
+    hw_profile_t hw_profile;
     _Atomic bool txrx_state; // IN_RX or IN_TX
     _Atomic uint32_t reflected_threshold; // vswr * 10
     _Atomic bool swr_protection_enabled;
@@ -229,6 +243,9 @@ typedef struct
 // init / shutdown functions
 bool hw_init(radio *radio_h, pthread_t *hw_tids);
 bool hw_shutdown(radio *radio_h, pthread_t *hw_tids);
+
+void radio_apply_defaults(radio *radio_h);
+bool radio_is_zbitx(const radio *radio_h);
 
 // hw io thread
 void *hw_thread(void *radio_h_v);

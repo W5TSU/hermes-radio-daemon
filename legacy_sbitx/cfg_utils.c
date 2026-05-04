@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>
 
 #ifndef DEBUG_CFG_
 #define DEBUG_CFG_ 0
@@ -181,6 +182,16 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     i = iniparser_getint(ini, "main:bfo", 40035000);
     // printf("BFO:      [%d]\n", i);
     radio_h->bfo_frequency = (uint32_t) i;
+
+    radio_h->hw_profile = HW_PROFILE_UNKNOWN;
+    s = iniparser_getstring(ini, "main:hw_profile", NULL);
+    if (s)
+    {
+        if (!strcasecmp(s, "zbitx"))
+            radio_h->hw_profile = HW_PROFILE_ZBITX;
+        else if (!strcasecmp(s, "sbitx"))
+            radio_h->hw_profile = HW_PROFILE_SBITX;
+    }
 
     i = iniparser_getint(ini, "main:bridge_compensation", 100);
     // printf("Bridge Compensation:      [%d]\n", i);
