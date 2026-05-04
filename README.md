@@ -10,7 +10,7 @@ Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net)
 - **SSB voice DSP chain**: 3-band pre-EQ, wideband compressor, pre-emphasis, DC block, limiter
 - **RX voice DSP chain**: DC block, adaptive noise reduction (libspecbleach), AGC (SLOW/MEDIUM/FAST), soft limiter
 - **Audio bridge** for websocket RX/TX streaming on both backends
-- Up to 4 profiles with frequency, mode, power, timeout, and digital-voice state
+- Up to 6 profiles with frequency, mode, power, timeout, and digital-voice state
 - Websocket control/media API with binary audio frames and waterfall/spectrum
 - WAV recording with remote start/stop
 - INI configuration at `/etc/sbitx/core.ini` and `/etc/sbitx/user.ini`
@@ -227,18 +227,29 @@ enable_ptt = 1
 freq = 6095000
 mode = DRM
 operating_mode = 0
-power_level_percentage = 100
-mic_level = 50
-rx_level = 100
-speaker_level = 50
-tx_level = 100
 bpf_low = 100
-bpf_high = 6000         ; 12 kHz DRM bandwidth (10 kHz mode B + margin)
+bpf_high = 6000
 agc = OFF
 compressor = OFF
 tx_preemphasis = OFF
 noise_reduction = OFF
 digital_voice = 0
+enable_knob_volume = 1
+enable_knob_frequency = 1
+enable_ptt = 1
+
+; ── profile5: Digital Voice (RADEv2) ──
+[profile5]
+freq = 7050000
+mode = USB
+operating_mode = 0
+bpf_low = 300
+bpf_high = 3000
+agc = OFF
+compressor = OFF
+tx_preemphasis = OFF
+noise_reduction = OFF
+digital_voice = 1
 enable_knob_volume = 1
 enable_knob_frequency = 1
 enable_ptt = 1
