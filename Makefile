@@ -23,7 +23,7 @@ endif
 
 .PHONY: all clean install legacy_sbitx_controller test compat-tests
 
-all: radio_daemon sbitx_client
+all: radio_daemon radio_client
 
 TEST_CFLAGS = -O0 -Wall -Wextra -std=gnu11 -fstack-protector \
               -I. -I/usr/include/iniparser -Iinclude
@@ -85,10 +85,10 @@ shm_utils.o: shm_utils.c shm_utils.h
 	$(CC) -c $(CFLAGS) shm_utils.c -o shm_utils.o
 
 # ── client ──────────────────────────────────────────────────────
-sbitx_client: sbitx_client.c sbitx_io.c shm_utils.c help.h \
+radio_client: sbitx_client.c sbitx_io.c shm_utils.c help.h \
               include/sbitx_io.h include/radio_cmds.h
 	$(CC) $(CFLAGS) sbitx_client.c sbitx_io.c shm_utils.c \
-	      -o sbitx_client -lpthread
+	      -o radio_client -lpthread
 
 # ── vendored legacy sBitx controller ────────────────────────────
 LEGACY_CFLAGS = $(CFLAGS) -I. -Ilegacy_sbitx -Ilegacy_sbitx/gpiolib -I/usr/include/csdr \
@@ -152,12 +152,13 @@ tests/compat_surface_test: tests/compat_surface_test.c radio_shm.c radio_shm.h \
 	$(CC) $(TEST_CFLAGS) tests/compat_surface_test.c -o $@ -lcrypto -lpthread
 
 # ── install ─────────────────────────────────────────────────────
-prefix     ?= /usr/local
+prefix     ?= /usr
 sysconfdir ?= /etc
 
-install: radio_daemon sbitx_client
+install: radio_daemon radio_client
 	install -D -m 755 radio_daemon  $(DESTDIR)$(prefix)/bin/radio_daemon
-	install -D -m 755 sbitx_client  $(DESTDIR)$(prefix)/bin/sbitx_client
+	install -D -m 755 radio_client  $(DESTDIR)$(prefix)/bin/radio_client
+	ln -sf radio_client $(DESTDIR)$(prefix)/bin/sbitx_client
 	install -d $(DESTDIR)$(sysconfdir)/sbitx
 	test -f $(DESTDIR)$(sysconfdir)/sbitx/core.ini || \
 	  install -m 644 config/core.ini $(DESTDIR)$(sysconfdir)/sbitx/core.ini
@@ -166,6 +167,6 @@ install: radio_daemon sbitx_client
 
 # ── clean ───────────────────────────────────────────────────────
 clean:
-	rm -f radio_daemon sbitx_client legacy_sbitx_controller $(DAEMON_OBJS) \
+	rm -f radio_daemon radio_client legacy_sbitx_controller $(DAEMON_OBJS) \
 	      $(LEGACY_EMBED_RAW) $(LEGACY_EMBED_MAP) $(LEGACY_EMBED_OBJ) \
 	      $(TEST_BINS)
