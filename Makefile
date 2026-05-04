@@ -113,6 +113,7 @@ SBITX_SRCS = sbitx/sbitx_controller.c \
              sbitx/sbitx_gpio.c \
              sbitx/sbitx_i2c.c \
              dsp/sbitx_radae.c \
+             dsp/sbitx_drm.c \
              sbitx/sbitx_shm.c \
              sbitx/sbitx_si5351.c \
              sbitx/sbitx_websocket.c \

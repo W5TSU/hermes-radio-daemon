@@ -181,6 +181,7 @@ typedef struct
 {
     // I2C
     char i2c_device[64];
+    char dream_path[256];
     int i2c_bus;
     pthread_mutex_t i2c_mutex;
     pthread_mutex_t gpio_mutex;

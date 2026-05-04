@@ -48,6 +48,7 @@
 #include "sbitx_core.h"
 #include "sbitx_alsa.h"
 #include "sbitx_radae.h"
+#include "sbitx_drm.h"
 
 // set 0 for production
 #ifndef DEBUG_DSP_
@@ -516,6 +517,55 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
             }
             output_speaker_int[k] <<= 8;
         }
+        memset(output_tx, 0, block_size * (snd_pcm_format_width(format) / 8));
+        return;
+    }
+
+    // STEP 7.7: DRM mode via Dream subprocess
+    if (rx_mode == MODE_DRM)
+    {
+        static bool drm_inited = false;
+        if (!drm_inited)
+        {
+            drm_inited = true;
+            sbitx_drm_init(radio_h_dsp->dream_path, 48000, 8000);
+        }
+
+        static float drm_i[MAX_BINS/2];
+        static float drm_q[MAX_BINS/2];
+        static float drm_audio[2048];
+
+        for (int k = 0; k < MAX_BINS / 2; k++)
+        {
+            drm_i[k] = (float) creal(fft_time[k + (MAX_BINS / 2)]);
+            drm_q[k] = (float) cimag(fft_time[k + (MAX_BINS / 2)]);
+        }
+
+        int audio_n = 0;
+        sbitx_drm_process(drm_i, drm_q, MAX_BINS / 2, drm_audio, &audio_n);
+
+        int32_t *output_speaker_int = (int32_t *)output_speaker;
+        int32_t *output_loopback_int = (int32_t *)output_loopback;
+
+        if (audio_n > 0)
+        {
+            for (int k = 0; k < block_size && k < audio_n; k++)
+            {
+                output_speaker_int[k] = (int32_t) (drm_audio[k] * MAX_SAMPLE_VALUE);
+                if ((k % 2) == 0)
+                {
+                    output_loopback_int[k] = output_speaker_int[k] << 4;
+                    output_loopback_int[k + 1] = output_loopback_int[k];
+                }
+                output_speaker_int[k] <<= 8;
+            }
+        }
+        else
+        {
+            memset(output_speaker, 0, block_size * (snd_pcm_format_width(format) / 8));
+            memset(output_loopback, 0, block_size * (snd_pcm_format_width(format) / 8));
+        }
+
         memset(output_tx, 0, block_size * (snd_pcm_format_width(format) / 8));
         return;
     }
@@ -996,6 +1046,8 @@ void dsp_free(radio *radio_h)
 
     free(rs_taps);
     rs_taps = NULL;
+
+    sbitx_drm_shutdown();
 }
 
 void dsp_set_filters()

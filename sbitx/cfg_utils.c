@@ -224,6 +224,9 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     if (s)
         strcpy(radio_h->i2c_device, s);
 
+    s = iniparser_getstring(ini, "main:dream_path", "/usr/bin/dream");
+    snprintf(radio_h->dream_path, sizeof(radio_h->dream_path), "%s", s ? s : "/usr/bin/dream");
+
     int sec_count = iniparser_getnsec(ini);
     sec_count--; // -1 to cope with the [main]
     // printf("Number of Sections:     [%d]\n", sec_count);
