@@ -24,7 +24,7 @@ typedef struct {
 typedef struct radio_backend_ops {
     const char *name;
     bool launches_embedded;
-    int (*launch)(const radio_daemon_runtime *runtime, const char *controller_path);
+    int (*launch)(const radio_daemon_runtime *runtime);
     bool (*init)(radio *radio_h);
     void (*shutdown)(radio *radio_h);
     void *(*io_thread)(void *radio_h_v);
@@ -48,7 +48,6 @@ typedef struct radio_backend_ops {
 typedef struct {
     radio_backend_kind kind;
     const radio_backend_ops *ops;
-    char controller_path[BACKEND_PATH_MAX];
 } radio_backend_selection;
 
 bool radio_backend_detect(const char *cfg_radio_path, radio_backend_selection *selection);

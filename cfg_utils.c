@@ -115,18 +115,15 @@ radio_backend_kind cfg_backend_kind_from_string(const char *backend_name)
     return RADIO_BACKEND_HAMLIB;
 }
 
-bool cfg_detect_backend(const char *cfg_radio, radio_backend_kind *backend_kind,
-                        char *controller_path, size_t controller_path_len)
+bool cfg_detect_backend(const char *cfg_radio, radio_backend_kind *backend_kind)
 {
     dictionary *ini;
     const char *backend;
-    const char *path;
 
-    if (!backend_kind || !controller_path || controller_path_len == 0)
+    if (!backend_kind)
         return false;
 
     *backend_kind = RADIO_BACKEND_HAMLIB;
-    snprintf(controller_path, controller_path_len, "%s", "sbitx_controller");
 
     ini = iniparser_load(cfg_radio);
     if (!ini)
@@ -134,9 +131,6 @@ bool cfg_detect_backend(const char *cfg_radio, radio_backend_kind *backend_kind,
 
     backend = iniparser_getstring(ini, "main:radio_backend", "hamlib");
     *backend_kind = cfg_backend_kind_from_string(backend);
-
-    path = iniparser_getstring(ini, "main:hfsignals_controller_path", "sbitx_controller");
-    snprintf(controller_path, controller_path_len, "%s", path);
 
     iniparser_freedict(ini);
     return true;
@@ -222,10 +216,6 @@ bool init_config_radio(radio *radio_h, const char *ini_name)
     radio_h->cfg_radio = ini;
     radio_h->backend_kind = cfg_backend_kind_from_string(
         iniparser_getstring(ini, "main:radio_backend", "hamlib"));
-    snprintf(radio_h->hfsignals_controller_path,
-             sizeof(radio_h->hfsignals_controller_path),
-             "%s",
-             iniparser_getstring(ini, "main:hfsignals_controller_path", "sbitx_controller"));
 
     /* Hamlib rig model */
     i = cfg_getint_alias(ini, "main:radio_model", "main:hamlib_model", 1);

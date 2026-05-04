@@ -17,7 +17,6 @@ static int daemon_core_calls;
 static struct {
     char cfg_radio_path[CONFIG_PATH_MAX];
     char cfg_user_path[CONFIG_PATH_MAX];
-    char controller_path[BACKEND_PATH_MAX];
     bool cpu_arg_provided;
     int cpu_nr;
 } last_bootstrap_call;
@@ -120,7 +119,6 @@ uint32_t get_swr(radio *radio_h)
 
 int legacy_sbitx_bootstrap(const char *cfg_radio_path,
                            const char *cfg_user_path,
-                           const char *controller_path,
                            bool cpu_arg_provided,
                            int cpu_nr)
 {
@@ -129,8 +127,6 @@ int legacy_sbitx_bootstrap(const char *cfg_radio_path,
              "%s", cfg_radio_path);
     snprintf(last_bootstrap_call.cfg_user_path, sizeof(last_bootstrap_call.cfg_user_path),
              "%s", cfg_user_path);
-    snprintf(last_bootstrap_call.controller_path, sizeof(last_bootstrap_call.controller_path),
-             "%s", controller_path);
     last_bootstrap_call.cpu_arg_provided = cpu_arg_provided;
     last_bootstrap_call.cpu_nr = cpu_nr;
     return 11;
@@ -157,7 +153,6 @@ static void test_backend_detect_defaults(void)
     assert(selection.kind == RADIO_BACKEND_HAMLIB);
     assert(selection.ops != NULL);
     assert(strcmp(selection.ops->name, "hamlib") == 0);
-    assert(strcmp(selection.controller_path, "sbitx_controller") == 0);
 }
 
 static void test_backend_detect_aliases(void)
@@ -173,7 +168,6 @@ static void test_backend_detect_aliases(void)
     assert(selection.kind == RADIO_BACKEND_HFSIGNALS);
     assert(selection.ops != NULL);
     assert(strcmp(selection.ops->name, "hfsignals") == 0);
-    assert(strcmp(selection.controller_path, "custom_legacy_controller") == 0);
 }
 
 static void test_backend_configure_and_run_dispatch(void)
@@ -194,15 +188,10 @@ static void test_backend_configure_and_run_dispatch(void)
     };
     radio radio_h;
 
-    snprintf(hamlib.controller_path, sizeof(hamlib.controller_path), "%s", "rigctl");
-    snprintf(hfsignals.controller_path, sizeof(hfsignals.controller_path), "%s",
-             "embedded-controller");
-
     memset(&radio_h, 0, sizeof(radio_h));
     radio_backend_configure(&radio_h, &hfsignals);
     assert(radio_h.backend_kind == RADIO_BACKEND_HFSIGNALS);
     assert(radio_h.backend_ops == hfsignals.ops);
-    assert(strcmp(radio_h.hfsignals_controller_path, "embedded-controller") == 0);
 
     bootstrap_calls = 0;
     daemon_core_calls = 0;
@@ -216,7 +205,6 @@ static void test_backend_configure_and_run_dispatch(void)
     assert(bootstrap_calls == 1);
     assert(strcmp(last_bootstrap_call.cfg_radio_path, "radio.ini") == 0);
     assert(strcmp(last_bootstrap_call.cfg_user_path, "user.ini") == 0);
-    assert(strcmp(last_bootstrap_call.controller_path, "embedded-controller") == 0);
     assert(last_bootstrap_call.cpu_arg_provided);
     assert(last_bootstrap_call.cpu_nr == 3);
 }

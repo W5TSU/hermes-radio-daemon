@@ -117,7 +117,6 @@ typedef struct {
     radio_backend_kind backend_kind;
     const struct radio_backend_ops *backend_ops;
     _Atomic(const struct radio_pipeline_descriptor *) pipeline;
-    char hfsignals_controller_path[BACKEND_PATH_MAX];
 
     /* Hamlib configuration */
     int hamlib_model;          /* Hamlib rig model number */

@@ -13,7 +13,6 @@
 
 int legacy_sbitx_bootstrap(const char *cfg_radio_path,
                            const char *cfg_user_path,
-                           const char *controller_path,
                            bool cpu_arg_provided,
                            int cpu_nr);
 

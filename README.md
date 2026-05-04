@@ -82,16 +82,12 @@ radio_daemon [-r /path/to/radio.ini] [-u /path/to/user.ini] [-c cpu_nr]
 * SHM control stays enabled by `enable_shm_control = 1`
 * profile settings remain in `user.ini`
 
-### Backend choice during migration
+### Backend choice
 
 * `radio_backend = hfsignals`: use this for existing sBitx/zBitx deployments.
-  `radio_daemon` embeds the vendored `legacy_sbitx` controller in-process, so
-  there is no external `sbitx_controller` exec hop anymore.
+  `radio_daemon` embeds the sBitx controller in-process.
 * `radio_backend = hamlib`: use this for Hamlib-controlled radios and the new
   daemon-managed websocket/audio/recording path.
-
-`hfsignals_controller_path` is kept only for migration compatibility. In the
-embedded `hfsignals` mode it is ignored.
 
 ## Configuration
 
@@ -119,14 +115,13 @@ recording_dir = /var/lib/hermes-radio-daemon
 Use `enable_audio_bridge = 1` on the Hamlib backend when you want live RX/TX
 audio over websocket, RX/TX spectrum, or WAV recording.
 
-#### Embedded legacy sBitx / HF Signals example
+#### Embedded sBitx / HF Signals example
 
 ```ini
 [main]
 radio_backend = hfsignals
 enable_shm_control = 1
 enable_websocket = 1
-hfsignals_controller_path = sbitx_controller ; ignored, kept for compatibility
 ```
 
 With `radio_backend = hfsignals`, `radio_daemon` boots the vendored

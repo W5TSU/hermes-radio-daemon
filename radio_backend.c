@@ -15,12 +15,10 @@
 #include "radio_daemon_core.h"
 #include "radio_hamlib.h"
 
-static int launch_hfsignals_backend(const radio_daemon_runtime *runtime,
-                                    const char *controller_path)
+static int launch_hfsignals_backend(const radio_daemon_runtime *runtime)
 {
     return legacy_sbitx_bootstrap(runtime->cfg_radio_path,
                                   runtime->cfg_user_path,
-                                  controller_path,
                                   runtime->cpu_arg_provided,
                                   runtime->cpu_nr);
 }
@@ -81,11 +79,7 @@ bool radio_backend_detect(const char *cfg_radio_path, radio_backend_selection *s
         return false;
 
     selection->kind = RADIO_BACKEND_HAMLIB;
-    snprintf(selection->controller_path, sizeof(selection->controller_path),
-             "%s", "sbitx_controller");
-    cfg_detect_backend(cfg_radio_path, &selection->kind,
-                       selection->controller_path,
-                       sizeof(selection->controller_path));
+    cfg_detect_backend(cfg_radio_path, &selection->kind);
     selection->ops = radio_backend_ops_for_kind(selection->kind);
     return selection->ops != NULL;
 }
@@ -97,10 +91,6 @@ void radio_backend_configure(radio *radio_h, const radio_backend_selection *sele
 
     radio_h->backend_kind = selection->kind;
     radio_h->backend_ops = selection->ops;
-    snprintf(radio_h->hfsignals_controller_path,
-             sizeof(radio_h->hfsignals_controller_path),
-             "%s",
-             selection->controller_path);
 }
 
 int radio_backend_run(const radio_backend_selection *selection,
@@ -110,7 +100,7 @@ int radio_backend_run(const radio_backend_selection *selection,
         return -1;
 
     if (selection->ops->launches_embedded)
-        return selection->ops->launch(runtime, selection->controller_path);
+        return selection->ops->launch(runtime);
 
     return radio_daemon_core_run(selection, runtime);
 }

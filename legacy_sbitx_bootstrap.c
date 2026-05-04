@@ -39,7 +39,6 @@ static void derive_legacy_web_path(const char *cfg_radio_path,
 
 int legacy_sbitx_bootstrap(const char *cfg_radio_path,
                            const char *cfg_user_path,
-                           const char *controller_path,
                            bool cpu_arg_provided,
                            int cpu_nr)
 {
@@ -54,23 +53,11 @@ int legacy_sbitx_bootstrap(const char *cfg_radio_path,
     legacy_sbitx_cfg_set_runtime_paths(radio_path, user_path, web_path);
 
     fprintf(stderr,
-            "radio_daemon: hfsignals backend bootstraps the vendored legacy_sbitx "
-            "controller in-process using radio=%s, user=%s, web=%s.\n",
-            radio_path,
-            user_path,
-            web_path);
+            "radio_daemon: hfsignals backend bootstrapping embedded controller "
+            "radio=%s user=%s web=%s\n",
+            radio_path, user_path, web_path);
 
-    if (controller_path &&
-        controller_path[0] != '\0' &&
-        strcmp(controller_path, "sbitx_controller") != 0)
-    {
-        fprintf(stderr,
-                "radio_daemon: main:hfsignals_controller_path=%s is ignored in "
-                "embedded mode.\n",
-                controller_path);
-    }
-
-    legacy_argv[legacy_argc++] = (char *) "legacy_sbitx_controller";
+    legacy_argv[legacy_argc++] = (char *) "sbitx_controller";
 
     if (cpu_arg_provided)
     {
