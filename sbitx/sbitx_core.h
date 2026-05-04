@@ -125,6 +125,16 @@ typedef enum
     HW_PROFILE_ZBITX,
 } hw_profile_t;
 
+typedef struct {
+    int16_t *samples;
+    size_t capacity;
+    size_t read_pos;
+    size_t write_pos;
+    size_t count;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+} audio_ring_buffer;
+
 // variables without _Atomic are not supposed to change during runtime after config file loads
 typedef struct {
 
@@ -206,6 +216,10 @@ typedef struct
     _Atomic bool enable_websocket; // this is needed for hermes-gui
     _Atomic bool enable_shm_control; // this is needed for sbitx_client
 
+    // audio bridge
+    _Atomic bool enable_audio_bridge;
+    _Atomic uint16_t audio_sample_rate;
+
     // some informational fields
     _Atomic uint32_t serial_number;
     _Atomic bool system_is_connected;  // VARA connection status
@@ -218,6 +232,10 @@ typedef struct
     // information written by modem, sent to ui
     _Atomic uint32_t bitrate;
     _Atomic int32_t snr;
+
+    // audio bridge ring buffers
+    audio_ring_buffer rx_audio_ring;
+    audio_ring_buffer tx_audio_ring;
 
     // profile variables
     _Atomic uint32_t profile_active_idx;
@@ -246,6 +264,12 @@ bool hw_shutdown(radio *radio_h, pthread_t *hw_tids);
 
 void radio_apply_defaults(radio *radio_h);
 bool radio_is_zbitx(const radio *radio_h);
+
+// audio bridge
+bool sbitx_bridge_init(radio *radio_h);
+void sbitx_bridge_shutdown(radio *radio_h);
+void sbitx_bridge_push_rx(radio *radio_h, const int16_t *samples, size_t nsamples);
+size_t sbitx_bridge_pop_tx(radio *radio_h, int16_t *samples, size_t max_samples);
 
 // hw io thread
 void *hw_thread(void *radio_h_v);

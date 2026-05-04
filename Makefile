@@ -107,6 +107,7 @@ SBITX_RADAE_SRCS = $(RADEV2_EMBED_SRCS)
 SBITX_SRCS = sbitx/sbitx_controller.c \
              sbitx/sbitx_alsa.c \
              sbitx/sbitx_buffer.c \
+             sbitx/sbitx_bridge.c \
              sbitx/sbitx_core.c \
              dsp/sbitx_dsp.c \
              sbitx/sbitx_gpio.c \

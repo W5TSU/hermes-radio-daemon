@@ -1067,9 +1067,34 @@ void *control_thread(void *device_ptr)
         {
             dsp_process_rx(buffer_radio_to_dsp, output_speaker, output_loopback, output_tx, block_size);
             maybe_dump_rx_speaker(output_speaker, buffer_size, true);
+
+            if (radio_h_snd->enable_audio_bridge)
+            {
+                static int16_t bridge_rx_buf[1024];
+                int32_t *spk = (int32_t *) output_speaker;
+                for (uint32_t k = 0; k < block_size; k++)
+                    bridge_rx_buf[k] = (int16_t) (spk[k] >> 16);
+                sbitx_bridge_push_rx(radio_h_snd, bridge_rx_buf, block_size);
+            }
         }
         else
         {
+            if (radio_h_snd->enable_audio_bridge)
+            {
+                static int16_t bridge_tx_buf[1024];
+                size_t got = sbitx_bridge_pop_tx(radio_h_snd, bridge_tx_buf, block_size);
+                if (got > 0)
+                {
+                    static uint8_t tx_bridge_buf_raw[4096];
+                    int32_t *tx_samples = (int32_t *) tx_bridge_buf_raw;
+                    for (size_t k = 0; k < got; k++)
+                        tx_samples[k] = (int32_t) bridge_tx_buf[k] << 16;
+                    if (got < block_size)
+                        memset(tx_samples + got, 0, (block_size - got) * sizeof(int32_t));
+                    signal_to_tx = tx_bridge_buf_raw;
+                }
+            }
+
             dsp_process_tx(signal_to_tx, output_speaker, output_loopback, output_tx, block_size, use_loopback);
         }
 

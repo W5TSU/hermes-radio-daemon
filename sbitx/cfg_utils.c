@@ -213,6 +213,12 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     // printf("Enable Shared Memory Control Interface:       [%d]\n", b);
     radio_h->enable_shm_control = (bool) b;
 
+    b = iniparser_getboolean(ini, "main:enable_audio_bridge", 0);
+    radio_h->enable_audio_bridge = (bool) b;
+
+    i = iniparser_getint(ini, "main:audio_sample_rate", 8000);
+    radio_h->audio_sample_rate = (uint16_t) i;
+
     s = iniparser_getstring(ini, "main:i2c_dev", NULL);
     // printf("I2C device:     [%s]\n", s ? s : "UNDEF");
     if (s)

@@ -104,9 +104,12 @@ int main(int argc, char* argv[])
    }
 
    /* Call in order... cfg, hw, shm, sound, shutdown in reverse order */
-   cfg_init(&radio_h, cfg_runtime_core_path(), cfg_runtime_user_path(), &cfg_tid);
+    cfg_init(&radio_h, cfg_runtime_core_path(), cfg_runtime_user_path(), &cfg_tid);
 
-   hw_init(&radio_h, hw_tids);
+    if (radio_h.enable_audio_bridge)
+        sbitx_bridge_init(&radio_h);
+
+    hw_init(&radio_h, hw_tids);
 
    if (radio_h.enable_websocket)
        websocket_init(&radio_h, cfg_runtime_web_path(), &web_tid);
@@ -127,9 +130,12 @@ int main(int argc, char* argv[])
    if (radio_h.enable_shm_control)
        shm_controller_shutdown(&shm_tid);
 
-   sound_system_shutdown(&radio_h, &control_tid, &radio_capture, &radio_playback, &loop_capture, &loop_playback);
-   dsp_free(&radio_h);
+    sound_system_shutdown(&radio_h, &control_tid, &radio_capture, &radio_playback, &loop_capture, &loop_playback);
+    dsp_free(&radio_h);
 
-   return EXIT_SUCCESS;
+    if (radio_h.enable_audio_bridge)
+        sbitx_bridge_shutdown(&radio_h);
+
+    return EXIT_SUCCESS;
 
 }
