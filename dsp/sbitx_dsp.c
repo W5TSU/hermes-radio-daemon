@@ -145,6 +145,14 @@ static bool tx_eq_init_done = false;
 static float tx_comp_env;
 static bool tx_comp_init_done = false;
 
+static float fm_last_phase = 0.0f;
+static float fm_deemp_state = 0.0f;
+static float fm_preemp_state = 0.0f;
+static complexf fm_last_iq = {0.0f, 0.0f};
+static float *fm_demod_temp = NULL;
+static bool fm_demod_ready = false;
+static float fm_audio_buf[2048];
+
 static float tx_float_buf[1024];
 static float tx_float_out[1024];
 
@@ -412,9 +420,10 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
     }
 
 	// STEP 5:zero out the other sideband
-	if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode == MODE_LSB)
+	uint16_t rx_mode = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
+	if (rx_mode == MODE_LSB)
         memset(fft_freq, 0, sizeof(fftw_complex) * (MAX_BINS/2));
-	else
+	else if (rx_mode != MODE_FM && rx_mode != MODE_AM && rx_mode != MODE_DRM)
         memset((void *) fft_freq + (MAX_BINS/2 * sizeof(fftw_complex)), 0, sizeof(fftw_complex) * (MAX_BINS/2));
 
 	// STEP 6: apply the filter to the signal,
@@ -425,6 +434,91 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
 
     //STEP 7: convert back to time domain
     fftw_execute(plan_rev);
+
+    // STEP 7.5: FM demodulation
+    if (rx_mode == MODE_FM)
+    {
+        if (!fm_demod_ready)
+        {
+            fm_demod_temp = malloc(4 * MAX_BINS * sizeof(float));
+            fm_demod_ready = (fm_demod_temp != NULL);
+        }
+
+        static complexf fm_iq_buf[1024];
+        for (int k = 0; k < MAX_BINS / 2; k++)
+        {
+            fm_iq_buf[k].i = (float) creal(fft_time[k + (MAX_BINS / 2)]);
+            fm_iq_buf[k].q = (float) cimag(fft_time[k + (MAX_BINS / 2)]);
+        }
+
+        fm_last_iq = fmdemod_quadri_cf(fm_iq_buf, fm_audio_buf,
+                                       MAX_BINS / 2, fm_demod_temp, fm_last_iq);
+
+        limit_ff(fm_audio_buf, fm_audio_buf, MAX_BINS / 2, 1.0f);
+
+        const float deemp_alpha = 0.192f;
+        for (int k = 0; k < MAX_BINS / 2; k++)
+        {
+            fm_deemp_state += deemp_alpha * (fm_audio_buf[k] - fm_deemp_state);
+            fm_audio_buf[k] = fm_deemp_state;
+        }
+
+        if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].agc != AGC_OFF)
+            dsp_process_agc_float(fm_audio_buf);
+
+        limit_ff(fm_audio_buf, fm_audio_buf, MAX_BINS / 2, 0.95f);
+
+        int32_t *output_speaker_int = (int32_t *)output_speaker;
+        int32_t *output_loopback_int = (int32_t *)output_loopback;
+        for (int k = 0; k < block_size; k++)
+        {
+            output_speaker_int[k] = (int32_t) (fm_audio_buf[k] * MAX_SAMPLE_VALUE);
+            if ((k % 2) == 0)
+            {
+                output_loopback_int[k] = output_speaker_int[k] << 4;
+                output_loopback_int[k + 1] = output_loopback_int[k];
+            }
+            output_speaker_int[k] <<= 8;
+        }
+        memset(output_tx, 0, block_size * (snd_pcm_format_width(format) / 8));
+        return;
+    }
+
+    // STEP 7.6: AM demodulation
+    if (rx_mode == MODE_AM)
+    {
+        static complexf am_iq_buf[1024];
+        for (int k = 0; k < MAX_BINS / 2; k++)
+        {
+            am_iq_buf[k].i = (float) creal(fft_time[k + (MAX_BINS / 2)]);
+            am_iq_buf[k].q = (float) cimag(fft_time[k + (MAX_BINS / 2)]);
+        }
+
+        amdemod_cf(am_iq_buf, fm_audio_buf, MAX_BINS / 2);
+
+        static float am_dc_level = 0.0f;
+        am_dc_level = fastdcblock_ff(fm_audio_buf, fm_audio_buf, MAX_BINS / 2, am_dc_level);
+
+        if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].agc != AGC_OFF)
+            dsp_process_agc_float(fm_audio_buf);
+
+        limit_ff(fm_audio_buf, fm_audio_buf, MAX_BINS / 2, 0.95f);
+
+        int32_t *output_speaker_int = (int32_t *)output_speaker;
+        int32_t *output_loopback_int = (int32_t *)output_loopback;
+        for (int k = 0; k < block_size; k++)
+        {
+            output_speaker_int[k] = (int32_t) (fm_audio_buf[k] * MAX_SAMPLE_VALUE);
+            if ((k % 2) == 0)
+            {
+                output_loopback_int[k] = output_speaker_int[k] << 4;
+                output_loopback_int[k + 1] = output_loopback_int[k];
+            }
+            output_speaker_int[k] <<= 8;
+        }
+        memset(output_tx, 0, block_size * (snd_pcm_format_width(format) / 8));
+        return;
+    }
 
 	//STEP 8 : Digital voice RX (before voice DSP to get clean complex IQ)
     if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice)
@@ -616,7 +710,64 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
         }
     }
 
-    if (!radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice)
+    bool digital_voice = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice;
+    uint16_t tx_mode = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
+
+    // FM TX: pre-emphasis + fmmod
+    if (tx_mode == MODE_FM)
+    {
+        for (i = 0; i < block_size; i++)
+            tx_float_buf[i] = (float) signal_input_f[i];
+
+        tx_dc_state = dcblock_ff(tx_float_buf, tx_float_out, block_size, 0.999f, tx_dc_state);
+
+        const float preemp_alpha = 0.13f;
+        for (i = 0; i < block_size; i++)
+        {
+            fm_preemp_state += preemp_alpha * (tx_float_out[i] - fm_preemp_state);
+            tx_float_out[i] = fm_preemp_state;
+        }
+
+        for (i = 0; i < block_size; i++)
+            tx_float_out[i] *= 0.104f;
+
+        static complexf fm_tx_iq[1024];
+        fm_last_phase = fmmod_fc(tx_float_out, fm_tx_iq, block_size, fm_last_phase);
+
+        for (i = MAX_BINS/2; i < MAX_BINS; i++)
+        {
+            int k = i - MAX_BINS/2;
+            fft_in[i] = (double) fm_tx_iq[k].i + I * (double) fm_tx_iq[k].q;
+            fft_m[k] = fft_in[i];
+        }
+    }
+    // AM TX: dcblock + DSB/SC + carrier
+    else if (tx_mode == MODE_AM)
+    {
+        for (i = 0; i < block_size; i++)
+            tx_float_buf[i] = (float) signal_input_f[i];
+
+        tx_dc_state = dcblock_ff(tx_float_buf, tx_float_out, block_size, 0.999f, tx_dc_state);
+
+        static complexf am_tx_iq[1024];
+        for (i = 0; i < block_size; i++)
+        {
+            am_tx_iq[i].i = tx_float_out[i];
+            am_tx_iq[i].q = 0.0f;
+        }
+        add_dcoffset_cc(am_tx_iq, am_tx_iq, block_size);
+
+        for (i = MAX_BINS/2; i < MAX_BINS; i++)
+        {
+            int k = i - MAX_BINS/2;
+            fft_in[i] = (double) am_tx_iq[k].i + I * (double) am_tx_iq[k].q;
+            fft_m[k] = fft_in[i];
+        }
+    }
+    // SSB/DV voice path
+    else
+    {
+        if (!digital_voice)
     {
         for (i = 0; i < block_size; i++)
             tx_float_buf[i] = (float) signal_input_f[i];
@@ -626,8 +777,6 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
         for (i = 0; i < block_size; i++)
             signal_input_f[i] = (double) tx_float_buf[i];
     }
-
-    bool digital_voice = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice;
 
     // Digital voice mode using RADAE: load fft_in/fft_m with upsampled complex
     // RADAE IQ, then fall through to the shared SSB pipeline (FFT, filter,
@@ -678,6 +827,7 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
             __imag__ fft_in[i]  = 0;
         }
     }
+    }
 
     //convert to frequency
     fftw_execute(plan_fwd);
@@ -692,12 +842,13 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
 
     // the usb extends from 0 to MAX_BINS/2 - 1,
     // the lsb extends from MAX_BINS - 1 to MAX_BINS/2 (reverse direction)
-    // zero out the other sideband
+    // zero out the other sideband (skip for FM/AM/DRM)
 
     // TBD: Something strange is going on, this should have been the otherway
-    if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode == MODE_LSB)
+    uint16_t tx_mode_for_sb = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
+    if (tx_mode_for_sb == MODE_LSB)
         memset(fft_out, 0, sizeof(fftw_complex) * (MAX_BINS/2));
-    else
+    else if (tx_mode_for_sb != MODE_FM && tx_mode_for_sb != MODE_AM && tx_mode_for_sb != MODE_DRM)
         memset((void *) fft_out + (MAX_BINS/2 * sizeof(fftw_complex)), 0, sizeof(fftw_complex) * (MAX_BINS/2));
 
     //now rotate to the tx_bin
@@ -854,8 +1005,16 @@ void dsp_set_filters()
 
     double bpf_low = (double) radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].bpf_low;
     double bpf_high = (double) radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].bpf_high;
+    uint16_t mode = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
 
-    if(radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode == MODE_LSB)
+    if (mode == MODE_FM || mode == MODE_AM || mode == MODE_DRM)
+    {
+        double lo = (1.0 * bpf_low) / 96000.0;
+        double hi = (1.0 * bpf_high) / 96000.0;
+        filter_tune(rx_filter, lo, hi, 5);
+        filter_tune(tx_filter, lo, hi, 5);
+    }
+    else if (mode == MODE_LSB)
     {
         filter_tune(tx_filter, (1.0 * -bpf_high) / 96000.0, (1.0 * -bpf_low) / 96000.0, 5);
         filter_tune(rx_filter, (1.0 * -bpf_high) / 96000.0, (1.0 * -bpf_low) / 96000.0, 5);

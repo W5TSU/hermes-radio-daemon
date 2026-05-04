@@ -74,6 +74,9 @@
 #define MODE_LSB 0
 #define MODE_USB 1
 #define MODE_CW 2
+#define MODE_FM 3
+#define MODE_AM 4
+#define MODE_DRM 5
 
 #define AGC_OFF 0
 #define AGC_SLOW 1
