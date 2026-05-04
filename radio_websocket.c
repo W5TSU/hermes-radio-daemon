@@ -35,8 +35,8 @@
 #include <unistd.h>
 
 #include "radio_backend.h"
-#include "radio_media.h"
-#include "radio_pipeline.h"
+#include "hamlib/radio_media.h"
+#include "hamlib/radio_pipeline.h"
 #include "radio_websocket.h"
 
 extern _Atomic bool shutdown_;

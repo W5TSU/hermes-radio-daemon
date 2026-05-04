@@ -10,17 +10,17 @@
 #include <string.h>
 
 #include "cfg_utils.h"
-#include "legacy_sbitx_bootstrap.h"
 #include "radio_backend.h"
-#include "radio_daemon_core.h"
-#include "radio_hamlib.h"
+#include "hamlib/radio_hamlib.h"
+#include "hamlib/radio_daemon_core.h"
+#include "sbitx_bootstrap.h"
 
 static int launch_hfsignals_backend(const radio_daemon_runtime *runtime)
 {
-    return legacy_sbitx_bootstrap(runtime->cfg_radio_path,
-                                  runtime->cfg_user_path,
-                                  runtime->cpu_arg_provided,
-                                  runtime->cpu_nr);
+    return sbitx_bootstrap(runtime->cfg_radio_path,
+                           runtime->cfg_user_path,
+                           runtime->cpu_arg_provided,
+                           runtime->cpu_nr);
 }
 
 static const radio_backend_ops hamlib_backend_ops = {

@@ -117,7 +117,7 @@ uint32_t get_swr(radio *radio_h)
     return radio_h->ref_power;
 }
 
-int legacy_sbitx_bootstrap(const char *cfg_radio_path,
+int sbitx_bootstrap(const char *cfg_radio_path,
                            const char *cfg_user_path,
                            bool cpu_arg_provided,
                            int cpu_nr)

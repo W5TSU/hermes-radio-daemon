@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 #include "radio.h"
-#include "radio_pipeline.h"
+#include "hamlib/radio_pipeline.h"
 #include "include/radio_cmds.h"
 #include "include/sbitx_io.h"
 
@@ -245,7 +245,7 @@ void *shm_attach(key_t key, size_t size)
     return &connector;
 }
 
-#include "../radio_pipeline.c"
+#include "../hamlib/radio_pipeline.c"
 #include "../radio_shm.c"
 #include "../radio_websocket.c"
 
