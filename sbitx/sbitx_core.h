@@ -101,7 +101,7 @@
 #define ENC_SLOW 5
 
 /* Maximum number of radio profiles */
-#define MAX_RADIO_PROFILES 4
+#define MAX_RADIO_PROFILES 5
 
 /* Maximum number of calibration bands */
 #define MAX_CAL_BANDS 16
