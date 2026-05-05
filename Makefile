@@ -13,6 +13,7 @@ LDFLAGS = -liniparser -lhamlib -lasound -lcrypto -lfftw3f -lpthread -lm
 
 include vendor/radev2/sources.mk
 include vendor/radev1/sources.mk
+include vendor/ft8_lib/sources.mk
 
 # Detect architecture for tuning flags
 uname_p := $(shell uname -m)
@@ -94,6 +95,7 @@ radio_client: sbitx_client.c sbitx_io.c shm_utils.c help.h \
 # ── sBitx embedded controller ───────────────────────────────────
 SBITX_CFLAGS = $(CFLAGS) -I. -Isbitx -Idsp -Isbitx/gpiolib -I/usr/include/csdr \
                $(RADEV2_EMBED_CPPFLAGS) $(RADEV2_EMBED_CFLAGS) \
+               $(FT8_LIB_CPPFLAGS) $(FT8_LIB_CFLAGS) \
                -Wno-deprecated-declarations
 SBITX_LDFLAGS = -liniparser -li2c -lssl -lcrypto -lpthread -lasound -lm -lfftw3 -lcsdr -lspecbleach
 SBITX_HDRS = $(wildcard sbitx/*.h dsp/*.h sbitx/gpiolib/*.h include/*.h \
@@ -104,6 +106,7 @@ SBITX_GPIOLIB_SRCS = sbitx/gpiolib/gpiolib.c \
                      sbitx/gpiolib/gpiochip_rp1.c \
                      sbitx/gpiolib/util.c
 SBITX_RADAE_SRCS = $(RADEV2_EMBED_SRCS)
+SBITX_FT8_SRCS = $(FT8_LIB_SRCS)
 SBITX_SRCS = sbitx/sbitx_controller.c \
              sbitx/sbitx_alsa.c \
              sbitx/sbitx_buffer.c \
@@ -114,6 +117,7 @@ SBITX_SRCS = sbitx/sbitx_controller.c \
              sbitx/sbitx_i2c.c \
              dsp/sbitx_radae.c \
              dsp/sbitx_drm.c \
+             dsp/sbitx_ft8.c \
              sbitx/sbitx_shm.c \
              sbitx/sbitx_si5351.c \
              sbitx/sbitx_websocket.c \
@@ -121,7 +125,8 @@ SBITX_SRCS = sbitx/sbitx_controller.c \
              sbitx/mongoose.c \
              sbitx/ring_buffer.c \
              shm_utils.c \
-             $(SBITX_RADAE_SRCS)
+             $(SBITX_RADAE_SRCS) \
+             $(SBITX_FT8_SRCS)
 SBITX_EMBED_RAW = sbitx/embedded_raw.o
 SBITX_EMBED_MAP = sbitx/embedded.syms
 SBITX_EMBED_OBJ = sbitx/embedded_prefixed.o

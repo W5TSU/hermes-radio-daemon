@@ -49,6 +49,7 @@
 #include "sbitx_alsa.h"
 #include "sbitx_radae.h"
 #include "sbitx_drm.h"
+#include "sbitx_ft8.h"
 
 // set 0 for production
 #ifndef DEBUG_DSP_
@@ -568,6 +569,14 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
 
         memset(output_tx, 0, block_size * (snd_pcm_format_width(format) / 8));
         return;
+    }
+
+    // STEP 7.8: FT8 mode - SSB demod + optional decode
+    if (rx_mode == MODE_FT8)
+    {
+        // FT8 uses standard SSB demod for RX - fall through to voice DSP
+        // Audio goes to speaker for monitoring, tone detection happens externally
+        rx_mode = MODE_USB;
     }
 
 	//STEP 8 : Digital voice RX (before voice DSP to get clean complex IQ)

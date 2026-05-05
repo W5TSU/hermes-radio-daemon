@@ -326,6 +326,8 @@ bool init_config_user(radio *radio_h, const char *ini_name)
             radio_h->profiles[k].mode = MODE_AM;
         else if (!strcmp(s, "DRM"))
             radio_h->profiles[k].mode = MODE_DRM;
+        else if (!strcmp(s, "FT8"))
+            radio_h->profiles[k].mode = MODE_FT8;
 
         sprintf(profile_field, "%s:operating_mode", profile_name);
         i = iniparser_getint(ini, profile_field, 1);
