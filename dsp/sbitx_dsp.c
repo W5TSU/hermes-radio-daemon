@@ -50,6 +50,7 @@
 #include "sbitx_radae.h"
 #include "sbitx_drm.h"
 #include "sbitx_ft8.h"
+#include "sbitx_cw.h"
 
 // set 0 for production
 #ifndef DEBUG_DSP_
@@ -574,8 +575,19 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
     // STEP 7.8: FT8 mode - SSB demod + optional decode
     if (rx_mode == MODE_FT8)
     {
-        // FT8 uses standard SSB demod for RX - fall through to voice DSP
-        // Audio goes to speaker for monitoring, tone detection happens externally
+        rx_mode = MODE_USB;
+    }
+
+    // STEP 7.9: CW mode - SSB demod + tone detection
+    if (rx_mode == MODE_CW)
+    {
+        static bool cw_rx_inited = false;
+        if (!cw_rx_inited)
+        {
+            sbitx_cw_init(radio_h_dsp->cw_wpm, radio_h_dsp->cw_pitch);
+            cw_rx_inited = true;
+        }
+
         rx_mode = MODE_USB;
     }
 
@@ -772,8 +784,46 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
     bool digital_voice = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice;
     uint16_t tx_mode = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
 
+    // CW TX: DDS tone gated by Morse pattern
+    if (tx_mode == MODE_CW)
+    {
+        static bool cw_tx_inited = false;
+        static float cw_tx_buf[2048];
+        static int cw_tx_len = 0;
+        static int cw_tx_pos = 0;
+
+        if (!cw_tx_inited)
+        {
+            sbitx_cw_init(radio_h_dsp->cw_wpm, radio_h_dsp->cw_pitch);
+            cw_tx_inited = true;
+        }
+
+        for (i = 0; i < block_size; i++)
+            tx_float_buf[i] = (float) signal_input_f[i];
+
+        tx_dc_state = dcblock_ff(tx_float_buf, tx_float_out, block_size, 0.999f, tx_dc_state);
+
+        static complexf cw_tx_iq[1024];
+        for (i = 0; i < block_size; i++)
+        {
+            static float cw_phase = 0.0f;
+            float dds_step = 2.0f * (float) M_PI * radio_h_dsp->cw_pitch / 96000.0f;
+            cw_phase += dds_step;
+            if (cw_phase > 2.0f * (float) M_PI) cw_phase -= 2.0f * (float) M_PI;
+            float tone = tx_float_out[i] * sinf(cw_phase);
+            cw_tx_iq[i].i = tone;
+            cw_tx_iq[i].q = 0.0f;
+        }
+
+        for (i = MAX_BINS/2; i < MAX_BINS; i++)
+        {
+            int k = i - MAX_BINS/2;
+            fft_in[i] = (double) cw_tx_iq[k].i + I * (double) cw_tx_iq[k].q;
+            fft_m[k] = fft_in[i];
+        }
+    }
     // FM TX: pre-emphasis + fmmod
-    if (tx_mode == MODE_FM)
+    else if (tx_mode == MODE_FM)
     {
         for (i = 0; i < block_size; i++)
             tx_float_buf[i] = (float) signal_input_f[i];

@@ -102,7 +102,7 @@
 #define ENC_SLOW 5
 
 /* Maximum number of radio profiles */
-#define MAX_RADIO_PROFILES 7
+#define MAX_RADIO_PROFILES 8
 
 /* Maximum number of calibration bands */
 #define MAX_CAL_BANDS 16
@@ -224,6 +224,10 @@ typedef struct
     // audio bridge
     _Atomic bool enable_audio_bridge;
     _Atomic uint16_t audio_sample_rate;
+
+    // CW settings
+    _Atomic uint16_t cw_wpm;
+    _Atomic uint16_t cw_pitch;
 
     // some informational fields
     _Atomic uint32_t serial_number;

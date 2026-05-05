@@ -44,7 +44,7 @@ DAEMON_OBJS = radio_daemon.o \
               cfg_utils.o    \
               shm_utils.o    \
               sbitx/embedded_prefixed.o
-RADIO_DAEMON_LDFLAGS = $(LDFLAGS) -li2c -lssl -lcsdr -lfftw3 -lspecbleach
+RADIO_DAEMON_LDFLAGS = $(LDFLAGS) -li2c -lssl -lcsdr -lfftw3 -lspecbleach -lcw
 
 radio_daemon: $(DAEMON_OBJS)
 	$(CC) -o radio_daemon $(DAEMON_OBJS) $(RADIO_DAEMON_LDFLAGS)
@@ -97,7 +97,7 @@ SBITX_CFLAGS = $(CFLAGS) -I. -Isbitx -Idsp -Isbitx/gpiolib -I/usr/include/csdr \
                $(RADEV2_EMBED_CPPFLAGS) $(RADEV2_EMBED_CFLAGS) \
                $(FT8_LIB_CPPFLAGS) $(FT8_LIB_CFLAGS) \
                -Wno-deprecated-declarations
-SBITX_LDFLAGS = -liniparser -li2c -lssl -lcrypto -lpthread -lasound -lm -lfftw3 -lcsdr -lspecbleach
+SBITX_LDFLAGS = -liniparser -li2c -lssl -lcrypto -lpthread -lasound -lm -lfftw3 -lcsdr -lspecbleach -lcw
 SBITX_HDRS = $(wildcard sbitx/*.h dsp/*.h sbitx/gpiolib/*.h include/*.h \
                vendor/radev2/src/*.h vendor/radev2/support/*.h) shm_utils.h
 SBITX_GPIOLIB_SRCS = sbitx/gpiolib/gpiolib.c \
@@ -118,6 +118,7 @@ SBITX_SRCS = sbitx/sbitx_controller.c \
              dsp/sbitx_radae.c \
              dsp/sbitx_drm.c \
              dsp/sbitx_ft8.c \
+             dsp/sbitx_cw.c \
              sbitx/sbitx_shm.c \
              sbitx/sbitx_si5351.c \
              sbitx/sbitx_websocket.c \
