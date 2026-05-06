@@ -278,6 +278,17 @@ bool init_config_radio(radio *radio_h, const char *ini_name)
     i = iniparser_getint(ini, "main:audio_queue_samples", 16000);
     radio_h->audio_queue_samples = (uint32_t) i;
 
+    i = iniparser_getint(ini, "main:cw_wpm", 20);
+    radio_h->cw_wpm = (uint16_t) i;
+    i = iniparser_getint(ini, "main:cw_pitch", 700);
+    radio_h->cw_pitch = (uint16_t) i;
+    i = iniparser_getint(ini, "main:rtty_baud", 45);
+    radio_h->rtty_baud = (uint16_t) i;
+    i = iniparser_getint(ini, "main:rtty_mark", 1585);
+    radio_h->rtty_mark = (uint16_t) i;
+    i = iniparser_getint(ini, "main:rtty_shift", 170);
+    radio_h->rtty_shift = (uint16_t) i;
+
     s = iniparser_getstring(ini, "main:recording_dir", "/var/lib/hermes-radio-daemon");
     snprintf(radio_h->recording_dir, sizeof(radio_h->recording_dir), "%s", s);
 

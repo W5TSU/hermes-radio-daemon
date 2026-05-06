@@ -51,6 +51,7 @@
 #include "sbitx_drm.h"
 #include "sbitx_ft8.h"
 #include "sbitx_cw.h"
+#include "sbitx_rtty.h"
 
 // set 0 for production
 #ifndef DEBUG_DSP_
@@ -591,6 +592,20 @@ void dsp_process_rx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
         rx_mode = MODE_USB;
     }
 
+    // STEP 7.10: RTTY mode - SSB demod + FSK detection
+    if (rx_mode == MODE_RTTY)
+    {
+        static bool rtty_rx_inited = false;
+        if (!rtty_rx_inited)
+        {
+            sbitx_rtty_init(radio_h_dsp->rtty_baud, radio_h_dsp->rtty_mark,
+                            radio_h_dsp->rtty_shift);
+            rtty_rx_inited = true;
+        }
+
+        rx_mode = MODE_USB;
+    }
+
 	//STEP 8 : Digital voice RX (before voice DSP to get clean complex IQ)
     if (radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice)
     {
@@ -819,6 +834,37 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
         {
             int k = i - MAX_BINS/2;
             fft_in[i] = (double) cw_tx_iq[k].i + I * (double) cw_tx_iq[k].q;
+            fft_m[k] = fft_in[i];
+        }
+    }
+    // RTTY TX: FSK modulator
+    else if (tx_mode == MODE_RTTY)
+    {
+        static bool rtty_inited = false;
+        static float rtty_audio[2048];
+        static int rtty_audio_len = 0;
+        static int rtty_audio_pos = 0;
+
+        if (!rtty_inited)
+        {
+            sbitx_rtty_init(radio_h_dsp->rtty_baud, radio_h_dsp->rtty_mark,
+                            radio_h_dsp->rtty_shift);
+            rtty_audio_len = sbitx_rtty_encode("  CQ CQ DE HERMES  ", rtty_audio, 2048,
+                                                radio_h_dsp->rtty_baud,
+                                                radio_h_dsp->rtty_mark,
+                                                radio_h_dsp->rtty_shift);
+            rtty_inited = true;
+        }
+
+        if (rtty_audio_pos >= rtty_audio_len)
+            rtty_audio_pos = 0;
+
+        for (i = MAX_BINS/2; i < MAX_BINS; i++)
+        {
+            int k = i - MAX_BINS/2;
+            float tone = rtty_audio[rtty_audio_pos++];
+            if (rtty_audio_pos >= rtty_audio_len) rtty_audio_pos = 0;
+            fft_in[i] = (double) tone;
             fft_m[k] = fft_in[i];
         }
     }

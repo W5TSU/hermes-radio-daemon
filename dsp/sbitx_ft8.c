@@ -25,7 +25,7 @@
 
 #include "sbitx_ft8.h"
 
-const char *ft8_spool_dir = "/var/spool/hermes-ft8";
+const char *digi_spool_dir = "/var/spool/hermes-digi";
 
 #define FT8_SYMBOL_PERIOD 0.160f
 #define FT8_SYMBOL_BT 2.0f
@@ -90,7 +90,7 @@ static void synth_gfsk(const uint8_t *symbols, int n_sym, float f0,
 
 bool sbitx_ft8_init(void)
 {
-    mkdir(ft8_spool_dir, 0755);
+    mkdir(digi_spool_dir, 0755);
     return true;
 }
 
@@ -113,7 +113,7 @@ int sbitx_ft8_encode(const char *message, float *signal, int max_samples,
     int n = max_samples;
     synth_gfsk(tones, FT8_NN, tone_freq, 12000, signal, &n);
 
-    sbitx_ft8_spool_add(message);
+    sbitx_ft8_spool_add("FT8", "tx", (int)(tone_freq / 1000.0f), message);
     return n;
 }
 
@@ -121,7 +121,7 @@ int sbitx_ft8_decode(float *audio_12k, int nsamples, char *decoded,
                      int max_decoded_len)
 {
     char tmp_path[256];
-    snprintf(tmp_path, sizeof(tmp_path), "%s/tmp_%d.wav", ft8_spool_dir, getpid());
+    snprintf(tmp_path, sizeof(tmp_path), "%s/tmp_%d.wav", digi_spool_dir, getpid());
 
     save_wav(audio_12k, nsamples, 12000, tmp_path);
 
@@ -159,21 +159,37 @@ int sbitx_ft8_decode(float *audio_12k, int nsamples, char *decoded,
     }
 
     if (len > 0)
-        sbitx_ft8_spool_add(decoded);
+        sbitx_ft8_spool_add("FT8", "rx", 0, decoded);
 
     return len;
 }
 
+void spool_log_line(const char *mode, const char *dir, int freq_khz, const char *text)
+{
+    mkdir(digi_spool_dir, 0755);
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/spool.log", digi_spool_dir);
+
+    FILE *f = fopen(path, "a");
+    if (f)
+    {
+        fprintf(f, "%s %s %d.%03d: %s\n", mode, dir,
+                freq_khz / 1000, freq_khz % 1000, text);
+        fclose(f);
+    }
+}
+
 int sbitx_ft8_spool_count(void)
 {
-    DIR *d = opendir(ft8_spool_dir);
+    DIR *d = opendir(digi_spool_dir);
     if (!d) return 0;
 
     int count = 0;
     struct dirent *e;
     while ((e = readdir(d)))
     {
-        if (e->d_name[0] == '.' || e->d_name[0] == 't')
+        if (e->d_name[0] == '.')
             continue;
         count++;
     }
@@ -184,34 +200,29 @@ int sbitx_ft8_spool_count(void)
 int sbitx_ft8_spool_read(int index, char *text, int max_len)
 {
     char path[512];
-    snprintf(path, sizeof(path), "%s/%06d.txt", ft8_spool_dir, index);
+    snprintf(path, sizeof(path), "%s/spool.log", digi_spool_dir);
 
     FILE *f = fopen(path, "r");
     if (!f) return -1;
 
-    if (fgets(text, max_len, f))
+    int current = 0;
+    while (fgets(text, max_len, f))
     {
-        int len = strlen(text);
-        if (len > 0 && text[len - 1] == '\n')
-            text[len - 1] = '\0';
-        fclose(f);
-        return len;
+        if (current == index)
+        {
+            int len = strlen(text);
+            if (len > 0 && text[len - 1] == '\n')
+                text[len - 1] = '\0';
+            fclose(f);
+            return len;
+        }
+        current++;
     }
     fclose(f);
     return -1;
 }
 
-void sbitx_ft8_spool_add(const char *text)
+void sbitx_ft8_spool_add(const char *mode, const char *dir, int freq_khz, const char *text)
 {
-    mkdir(ft8_spool_dir, 0755);
-
-    char path[512];
-    snprintf(path, sizeof(path), "%s/%06d.txt", ft8_spool_dir, spool_index++);
-
-    FILE *f = fopen(path, "w");
-    if (f)
-    {
-        fprintf(f, "%s\n", text);
-        fclose(f);
-    }
+    spool_log_line(mode, dir, freq_khz, text);
 }

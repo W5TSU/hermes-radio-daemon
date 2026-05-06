@@ -171,6 +171,14 @@ typedef struct {
     _Atomic uint32_t audio_sample_rate;
     _Atomic uint32_t audio_period_size;
     _Atomic uint32_t audio_queue_samples;
+
+    // digital mode config
+    _Atomic uint16_t cw_wpm;
+    _Atomic uint16_t cw_pitch;
+    _Atomic uint16_t rtty_baud;
+    _Atomic uint16_t rtty_mark;
+    _Atomic uint16_t rtty_shift;
+
     char recording_dir[RECORDING_PATH_MAX];
 
     /* Profile management */

@@ -1,4 +1,8 @@
 append_string sbitx_append_string
+baudot_decode sbitx_baudot_decode
+baudot_encode sbitx_baudot_encode
+baudot_reset sbitx_baudot_reset
+baudot_usos sbitx_baudot_usos
 bcm2711_chip sbitx_bcm2711_chip
 bcm2712_aon_chip sbitx_bcm2712_aon_chip
 bcm2712c0_aon_chip sbitx_bcm2712c0_aon_chip
@@ -42,6 +46,7 @@ control_thread sbitx_control_thread
 copy_token sbitx_copy_token
 dash_change sbitx_dash_change
 dd_to_int sbitx_dd_to_int
+digi_spool_dir sbitx_digi_spool_dir
 do_gpio_poll sbitx_do_gpio_poll
 do_gpio_poll_add sbitx_do_gpio_poll_add
 drive_names sbitx_drive_names
@@ -94,9 +99,13 @@ frame_sync_w2 sbitx_frame_sync_w2
 frame_sync_w4 sbitx_frame_sync_w4
 free_size_buffer sbitx_free_size_buffer
 fsel_names sbitx_fsel_names
+fsk_detect_carrier sbitx_fsk_detect_carrier
+fsk_find_frame sbitx_fsk_find_frame
+fsk_plan_destroy sbitx_fsk_plan_destroy
+fsk_plan_new sbitx_fsk_plan_new
+fsk_set_tones_by_bandshift sbitx_fsk_set_tones_by_bandshift
 ft4_encode sbitx_ft4_encode
 ft8_encode sbitx_ft8_encode
-ft8_spool_dir sbitx_ft8_spool_dir
 ftx_add_crc sbitx_ftx_add_crc
 ftx_compute_crc sbitx_ftx_compute_crc
 ftx_decode_candidate sbitx_ftx_decode_candidate
@@ -538,6 +547,11 @@ sbitx_ft8_shutdown sbitx_sbitx_ft8_shutdown
 sbitx_ft8_spool_add sbitx_sbitx_ft8_spool_add
 sbitx_ft8_spool_count sbitx_sbitx_ft8_spool_count
 sbitx_ft8_spool_read sbitx_sbitx_ft8_spool_read
+sbitx_rtty_encode sbitx_sbitx_rtty_encode
+sbitx_rtty_init sbitx_sbitx_rtty_init
+sbitx_rtty_rx_process sbitx_sbitx_rtty_rx_process
+sbitx_rtty_rx_samples_per_block sbitx_sbitx_rtty_rx_samples_per_block
+sbitx_rtty_shutdown sbitx_sbitx_rtty_shutdown
 set_bfo sbitx_set_bfo
 set_digital_voice sbitx_set_digital_voice
 set_drive sbitx_set_drive
@@ -573,6 +587,7 @@ size_buffer sbitx_size_buffer
 sound_mixer sbitx_sound_mixer
 sound_system_init sbitx_sound_system_init
 sound_system_shutdown sbitx_sound_system_shutdown
+spool_log_line sbitx_spool_log_line
 start_periodic_timer sbitx_start_periodic_timer
 starts_with sbitx_starts_with
 swr_protection_check sbitx_swr_protection_check

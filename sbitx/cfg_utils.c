@@ -225,6 +225,15 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     i = iniparser_getint(ini, "main:cw_pitch", 700);
     radio_h->cw_pitch = (uint16_t) i;
 
+    i = iniparser_getint(ini, "main:rtty_baud", 45);
+    radio_h->rtty_baud = (uint16_t) i;
+
+    i = iniparser_getint(ini, "main:rtty_mark", 1585);
+    radio_h->rtty_mark = (uint16_t) i;
+
+    i = iniparser_getint(ini, "main:rtty_shift", 170);
+    radio_h->rtty_shift = (uint16_t) i;
+
     s = iniparser_getstring(ini, "main:i2c_dev", NULL);
     // printf("I2C device:     [%s]\n", s ? s : "UNDEF");
     if (s)
@@ -334,6 +343,8 @@ bool init_config_user(radio *radio_h, const char *ini_name)
             radio_h->profiles[k].mode = MODE_DRM;
         else if (!strcmp(s, "FT8"))
             radio_h->profiles[k].mode = MODE_FT8;
+        else if (!strcmp(s, "RTTY"))
+            radio_h->profiles[k].mode = MODE_RTTY;
 
         sprintf(profile_field, "%s:operating_mode", profile_name);
         i = iniparser_getint(ini, profile_field, 1);

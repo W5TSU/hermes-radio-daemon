@@ -20,8 +20,8 @@ int  sbitx_ft8_decode(float *audio_12k, int nsamples, char *decoded, int max_dec
 
 int  sbitx_ft8_spool_count(void);
 int  sbitx_ft8_spool_read(int index, char *text, int max_len);
-void sbitx_ft8_spool_add(const char *text);
+void sbitx_ft8_spool_add(const char *mode, const char *dir, int freq_khz, const char *text);
 
-extern const char *ft8_spool_dir;
+extern const char *digi_spool_dir;
 
 #endif /* SBITX_FT8_H_ */

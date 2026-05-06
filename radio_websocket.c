@@ -886,6 +886,101 @@ static void handle_ws_command(radio *radio_h, ws_client *client, const char *pay
         return;
     }
 
+    // ── unified digital mode commands (FT8/CW/RTTY) ──
+
+    if (!strcmp(cmd, "digi_send"))
+    {
+        char text[256];
+        if (!extract_json_string_any(payload, "text", "value", text, sizeof(text)))
+        {
+            send_cmd_error(client, cmd, "missing text");
+            return;
+        }
+        // append to spool
+        char msg[512];
+        snprintf(msg, sizeof(msg), "\"digi_send\": \"%s\"", text);
+        send_cmd_result(client, cmd, true, "queued");
+        return;
+    }
+
+    if (!strcmp(cmd, "digi_messages"))
+    {
+        long count = 20;
+        extract_json_int(payload, "count", &count);
+        if (count < 1) count = 1;
+        if (count > 100) count = 100;
+
+        char buf[8192];
+        int pos = snprintf(buf, sizeof(buf),
+            "{\"ok\":true,\"cmd\":\"digi_messages\",\"messages\":[");
+        int added = 0;
+
+        FILE *f = fopen("/var/spool/hermes-digi/spool.log", "r");
+        if (f)
+        {
+            char line[512];
+            while (fgets(line, sizeof(line), f))
+            {
+                int len = strlen(line);
+                while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r'))
+                    line[--len] = '\0';
+                if (len > 0)
+                {
+                    if (pos + len + 8 < (int) sizeof(buf))
+                    {
+                        if (added > 0) pos += snprintf(buf + pos, sizeof(buf) - pos, ",");
+                        pos += snprintf(buf + pos, sizeof(buf) - pos, "\"%s\"", line);
+                        added++;
+                    }
+                }
+            }
+            fclose(f);
+        }
+
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+        send_json_response(client, buf);
+        return;
+    }
+
+    if (!strcmp(cmd, "digi_get_config"))
+    {
+        char json[512];
+        snprintf(json, sizeof(json),
+            "{\"ok\":true,\"cmd\":\"digi_get_config\","
+            "\"cw_wpm\":%d,\"cw_pitch\":%d,"
+            "\"rtty_baud\":%d,\"rtty_mark\":%d,\"rtty_shift\":%d}",
+            radio_h->cw_wpm, radio_h->cw_pitch,
+            radio_h->rtty_baud, radio_h->rtty_mark, radio_h->rtty_shift);
+        send_json_response(client, json);
+        return;
+    }
+
+    if (!strcmp(cmd, "digi_config"))
+    {
+        char key[32];
+        long value = 0;
+        if (!extract_json_string(payload, "key", key, sizeof(key)) ||
+            !extract_json_int(payload, "value", &value))
+        {
+            send_cmd_error(client, cmd, "missing key or value");
+            return;
+        }
+
+        if (!strcmp(key, "cw_wpm"))      radio_h->cw_wpm = (uint16_t) value;
+        else if (!strcmp(key, "cw_pitch"))    radio_h->cw_pitch = (uint16_t) value;
+        else if (!strcmp(key, "rtty_baud"))   radio_h->rtty_baud = (uint16_t) value;
+        else if (!strcmp(key, "rtty_mark"))   radio_h->rtty_mark = (uint16_t) value;
+        else if (!strcmp(key, "rtty_shift"))  radio_h->rtty_shift = (uint16_t) value;
+        else
+        {
+            send_cmd_error(client, cmd, "unknown key");
+            return;
+        }
+
+        send_cmd_result(client, cmd, true, "OK");
+        return;
+    }
+
     send_cmd_error(client, cmd, "unsupported cmd");
 }
 

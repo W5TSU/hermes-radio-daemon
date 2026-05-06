@@ -78,6 +78,7 @@
 #define MODE_AM 4
 #define MODE_DRM 5
 #define MODE_FT8 6
+#define MODE_RTTY 7
 
 #define AGC_OFF 0
 #define AGC_SLOW 1
@@ -102,7 +103,7 @@
 #define ENC_SLOW 5
 
 /* Maximum number of radio profiles */
-#define MAX_RADIO_PROFILES 8
+#define MAX_RADIO_PROFILES 9
 
 /* Maximum number of calibration bands */
 #define MAX_CAL_BANDS 16
@@ -228,6 +229,11 @@ typedef struct
     // CW settings
     _Atomic uint16_t cw_wpm;
     _Atomic uint16_t cw_pitch;
+
+    // RTTY settings
+    _Atomic uint16_t rtty_baud;
+    _Atomic uint16_t rtty_mark;
+    _Atomic uint16_t rtty_shift;
 
     // some informational fields
     _Atomic uint32_t serial_number;
