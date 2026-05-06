@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HERMES Radio Control</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #111; color: #0f0; max-width: 900px; margin: 0 auto; padding: 10px; }
+h1, h2 { color: #0f0; margin: 10px 0; }
+.panel { border: 1px solid #333; padding: 10px; margin: 8px 0; border-radius: 4px; }
+input, select, button { padding: 5px 8px; margin: 2px; border: 1px solid #333; background: #222; color: #0f0; font-family: monospace; }
+button { cursor: pointer; background: #1a3a1a; }
+button:hover { background: #2a5a2a; }
+label { color: #080; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#messages { height: 300px; overflow-y: auto; font-size: 12px; white-space: pre; background: #000; border: 1px solid #333; padding: 5px; }
+#messages div { padding: 1px 0; }
+#messages .rx { color: #0f0; }
+#messages .tx { color: #0af; }
+#status { color: #888; font-size: 11px; }
+#connect { background: #3a1a1a; }
+#connect:hover { background: #5a2a2a; }
+.connected { color: #0f0; }
+.disconnected { color: #f00; }
+#audio-status { font-size: 11px; }
+#spectrum canvas { width: 100%; height: 120px; background: #000; border: 1px solid #333; }
+.tab { display: inline-block; padding: 4px 12px; cursor: pointer; border: 1px solid #333; border-bottom: none; background: #1a1a1a; }
+.tab.active { background: #222; color: #0f0; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<h1>HERMES Radio Control</h1>
+
+<div class="panel row">
+  <label>WS:</label>
+  <input type="text" id="ws-url" value="ws://localhost:8080" size="24">
+  <button id="connect" onclick="ws_connect()">Connect</button>
+  <span id="status" class="disconnected">disconnected</span>
+</div>
+
+<!-- Tabs -->
+<div style="margin-top: 10px;">
+  <span class="tab active" onclick="show_tab('ctrl')">Control</span>
+  <span class="tab" onclick="show_tab('digi')">Digital Modes</span>
+  <span class="tab" onclick="show_tab('spectrum-tab')">Spectrum</span>
+</div>
+
+<!-- Control tab -->
+<div id="tab-ctrl" class="tab-content active">
+  <div class="panel">
+    <h2>Radio State</h2>
+    <div class="row">
+      <label>Freq (Hz):</label>
+      <input type="text" id="freq" size="10" value="14200000">
+      <button onclick="send_cmd('set_frequency', 'value', document.getElementById('freq').value)">Set</button>
+      <label style="margin-left:12px">Profile:</label>
+      <select id="profile" onchange="send_cmd('set_profile', 'value', this.value)">
+        <option value="0">0: Data</option>
+        <option value="1">1: SSB</option>
+        <option value="2">2: FM</option>
+        <option value="3">3: AM</option>
+        <option value="4">4: DRM</option>
+        <option value="5">5: DV</option>
+        <option value="6">6: FT8</option>
+        <option value="7">7: CW</option>
+        <option value="8">8: RTTY</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label>Mode:</label>
+      <select id="mode" onchange="send_cmd('set_mode', 'value', this.value)">
+        <option value="USB">USB</option><option value="LSB">LSB</option>
+        <option value="FM">FM</option><option value="AM">AM</option>
+        <option value="DRM">DRM</option>
+        <option value="FT8">FT8</option>
+        <option value="CW">CW</option><option value="RTTY">RTTY</option>
+      </select>
+      <button id="ptt-btn" onclick="ptt_toggle()">PTT ON</button>
+      <button onclick="send_cmd('get_state')">Refresh</button>
+    </div>
+    <div id="state" style="margin-top:6px; font-size:12px; color:#888;"></div>
+  </div>
+</div>
+
+<!-- Digital modes tab -->
+<div id="tab-digi" class="tab-content">
+  <div class="panel">
+    <h2>Digital Mode Messages</h2>
+    <div class="row">
+      <input type="text" id="digi-text" size="40" placeholder="CQ CQ DE CALLSIGN GRID" onkeydown="if(event.key==='Enter')send_digi()">
+      <button onclick="send_digi()">Send TX</button>
+      <button onclick="send_cmd('digi_messages', 'count', '20')">Refresh</button>
+    </div>
+    <div id="messages"></div>
+  </div>
+  <div class="panel">
+    <h2>Digital Mode Config</h2>
+    <div class="row">
+      <label>CW WPM:</label>
+      <input type="number" id="cw_wpm" value="20" size="4" min="5" max="60">
+      <button onclick="set_digi_config('cw_wpm')">Set</button>
+      <label style="margin-left:10px">CW Pitch:</label>
+      <input type="number" id="cw_pitch" value="700" size="4" min="300" max="1000">
+      <button onclick="set_digi_config('cw_pitch')">Set</button>
+    </div>
+    <div class="row" style="margin-top:4px">
+      <label>RTTY Baud:</label>
+      <input type="number" id="rtty_baud" value="45" size="4">
+      <button onclick="set_digi_config('rtty_baud')">Set</button>
+      <label style="margin-left:10px">RTTY Mark:</label>
+      <input type="number" id="rtty_mark" value="1585" size="5">
+      <button onclick="set_digi_config('rtty_mark')">Set</button>
+      <label style="margin-left:10px">RTTY Shift:</label>
+      <input type="number" id="rtty_shift" value="170" size="4">
+      <button onclick="set_digi_config('rtty_shift')">Set</button>
+    </div>
+    <div id="digi-config-status" style="margin-top:4px; font-size:11px; color:#888;"></div>
+  </div>
+</div>
+
+<!-- Spectrum tab -->
+<div id="tab-spectrum-tab" class="tab-content">
+  <div class="panel">
+    <h2>RX Spectrum</h2>
+    <div id="spectrum"><canvas id="spec-canvas"></canvas></div>
+    <div id="audio-status">No audio data yet</div>
+  </div>
+</div>
+
+<script>
+var ws = null;
+var audio_ctx = null;
+var spec_canvas = null;
+var spec_ctx = null;
+var ptt_on = false;
+var ws_url = '';
+
+function $(id) { return document.getElementById(id); }
+
+function log(msg, cls) {
+  var m = $('messages');
+  var d = document.createElement('div');
+  d.className = cls || '';
+  d.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  m.prepend(d);
+}
+
+function show_tab(name) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  $('tab-' + name).classList.add('active');
+  if (name === 'spectrum-tab') start_spectrum();
+}
+
+function ws_connect() {
+  ws_url = $('ws-url').value;
+  if (ws) { ws.close(); ws = null; }
+
+  ws = new WebSocket(ws_url);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = function() {
+    $('status').textContent = 'connected';
+    $('status').className = 'connected';
+    $('connect').textContent = 'Disconnect';
+    send_cmd('get_state');
+    send_cmd('digi_get_config');
+  };
+
+  ws.onclose = function() {
+    $('status').textContent = 'disconnected';
+    $('status').className = 'disconnected';
+    $('connect').textContent = 'Connect';
+    ws = null;
+  };
+
+  ws.onmessage = function(ev) {
+    if (typeof ev.data === 'string') {
+      handle_text(ev.data);
+    } else {
+      handle_binary(new Uint8Array(ev.data));
+    }
+  };
+}
+
+function handle_text(data) {
+  try {
+    var j = JSON.parse(data);
+    if (j.cmd === 'get_state' && j.ok) {
+      $('freq').value = j.freq || '';
+      if (j.profile !== undefined) $('profile').value = j.profile;
+      if (j.mode) $('mode').value = j.mode;
+      if (j.txrx_state !== undefined) {
+        ptt_on = (j.txrx_state === 1);
+        $('ptt-btn').textContent = ptt_on ? 'PTT OFF' : 'PTT ON';
+      }
+      $('state').textContent = JSON.stringify(j, null, 1);
+    }
+    if (j.cmd === 'digi_messages') {
+      $('messages').innerHTML = '';
+      var msgs = j.messages || [];
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        var cls = (msgs[i].indexOf('tx ') >= 0) ? 'tx' : 'rx';
+        log(msgs[i], cls);
+      }
+    }
+    if (j.cmd === 'digi_get_config') {
+      if (j.cw_wpm) $('cw_wpm').value = j.cw_wpm;
+      if (j.cw_pitch) $('cw_pitch').value = j.cw_pitch;
+      if (j.rtty_baud) $('rtty_baud').value = j.rtty_baud;
+      if (j.rtty_mark) $('rtty_mark').value = j.rtty_mark;
+      if (j.rtty_shift) $('rtty_shift').value = j.rtty_shift;
+    }
+    if (j.cmd === 'digi_config' || j.cmd === 'digi_send')
+      $('digi-config-status').textContent = j.status || j.ok ? 'OK' : 'Failed';
+  } catch(e) {}
+}
+
+function handle_binary(data) {
+  if (data.length < 2) return;
+  if (data[0] === 0x01) {
+    play_audio(data.subarray(1));
+  }
+  if (data[0] === 0x02) {
+    draw_spectrum(data.subarray(1));
+  }
+}
+
+function send_cmd(cmd, key, val) {
+  if (!ws) return;
+  var obj = { cmd: cmd };
+  var profile = parseInt($('profile').value);
+  if (['get_frequency','set_frequency','get_mode','set_mode','get_power','set_power','get_volume','set_volume'].indexOf(cmd) >= 0)
+    obj.profile = profile;
+  if (key && val) obj[key] = val;
+  ws.send(JSON.stringify(obj));
+}
+
+function send_digi() {
+  send_cmd('digi_send', 'text', $('digi-text').value);
+  log('tx ' + $('digi-text').value, 'tx');
+  $('digi-text').value = '';
+}
+
+function set_digi_config(key) {
+  send_cmd('digi_config', 'key', key);
+  send_cmd('digi_config', 'value', $(key).value);
+}
+
+function ptt_toggle() {
+  send_cmd(ptt_on ? 'ptt_off' : 'ptt_on');
+}
+
+function play_audio(samples16) {
+  if (!audio_ctx) audio_ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 8000});
+  var buf = audio_ctx.createBuffer(1, samples16.length / 2, 8000);
+  var ch = buf.getChannelData(0);
+  var view = new DataView(samples16.buffer, samples16.byteOffset, samples16.byteLength);
+  for (var i = 0; i < ch.length; i++)
+    ch[i] = view.getInt16(i * 2, true) / 32768.0;
+  var src = audio_ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audio_ctx.destination);
+  src.start();
+}
+
+function start_spectrum() {
+  if (!audio_ctx) audio_ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 8000});
+}
+
+function draw_spectrum(data) {
+  var canvas = $('spec-canvas');
+  if (!canvas) return;
+  var dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  if (dv.byteLength < 6) return;
+  var sample_rate = dv.getUint32(0, true);
+  var bins = dv.getUint16(4, true);
+  var n = (dv.byteLength - 6) / 4;
+  if (n !== bins) return;
+
+  canvas.width = canvas.offsetWidth || 600;
+  canvas.height = canvas.offsetHeight || 120;
+  var ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#0f0';
+  ctx.beginPath();
+
+  var h = canvas.height;
+  var w = canvas.width;
+  for (var i = 0; i < n; i++) {
+    var db = dv.getFloat32(6 + i * 4, true);
+    var x = (i / n) * w;
+    var y = h - ((db + 120) / 120) * h;
+    if (y < 0) y = 0;
+    if (y > h) y = h;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  $('audio-status').textContent = 'Rate: ' + sample_rate + ' Hz, Bins: ' + bins;
+}
+</script>
+</body>
+</html>
