@@ -363,32 +363,6 @@ Uses vendored `minimodem` FSK core (FFT-based FSK detector + Baudot codec):
 
 Neural-network-based digital voice codec. Activated per-profile with `digital_voice = 1`. Uses the vendored RADEv2 pure-C encoder/decoder at `vendor/radev2/`. The full voice DSP chain (compressor, pre-emphasis, noise reduction) is automatically bypassed when `digital_voice = 1`.
 
-### FT8 (8-FSK digital mode)
-
-Weak-signal digital mode using vendored `ft8_lib` for encoding and the `decode_ft8` binary for reception:
-- **TX**: text → 77-bit LDPC payload → 8-FSK tones → GFSK audio @ 12 kHz → SSB TX
-- **RX**: SSB USB demod → audio → `decode_ft8` pipe → decoded messages → spool
-- Standard 15-second slots, 50–3000 Hz SSB bandwidth
-- Active tone frequency configurable (`ft8_tone`, default 1000 Hz)
-
-### CW (Morse code)
-
-Uses `libunixcw` for RX decoding state machine and a DDS tone generator for TX:
-- **TX**: text → Morse lookup → DDS sine keyed by dot/dash timing → raised-cosine envelope → SSB TX
-- **RX**: SSB USB demod → Goertzel single-bin detector → mark/space events → `cw_rec_mark_begin/end()` → decoded characters → spool
-- Configurable WPM (`cw_wpm`, default 20) and pitch (`cw_pitch`, default 700 Hz)
-- End-of-message detection: 3× word-space silence (~2s at 12 WPM)
-- Narrow filter: bpf_low=500, bpf_high=900 (around 700 Hz pitch)
-
-### RTTY (Radio Teletype — 45.45 baud FSK)
-
-Uses vendored `minimodem` FSK core (FFT-based demodulator) and a Baudot FSK tone generator:
-- **TX**: text → Baudot encoding (5-bit + start/1.5 stop) → FSK tones (mark/space) → SSB TX
-- **RX**: SSB USB demod → 12 kHz audio → `fsk_find_frame()` → Baudot decode → spool
-- Configurable baud (`rtty_baud`, default 45), mark frequency (`rtty_mark`, default 1585 Hz), shift (`rtty_shift`, default 170 Hz — space = mark - shift)
-- End-of-message: CR+LF (Baudot carriage return) or 3-second idle timeout
-- Standard low-tones: mark 1585 Hz, space 1415 Hz; high tones available via config
-
 ### Unified Digital Mode WebSocket API
 
 All three digital text modes (FT8/CW/RTTY) share a common interface:
@@ -485,25 +459,16 @@ sbitx_client -c radio_reset
 
 Run `sbitx_client -h` for the full command list.
 
-## Migrating from `sbitx_controller`
+## Demo HTML Client
 
-### What changes
+A self-contained websocket client is provided at `config/index.html`. Open it in any browser to connect to the daemon's websocket:
 
-Old:
-```bash
-sbitx_controller [-c cpu_nr]
-```
+- **Control tab**: set frequency, mode, profile (0–8), PTT on/off
+- **Digital Modes tab**: send FT8/CW/RTTY text, view decoded messages, configure WPM/pitch/baud
+- **Spectrum tab**: real-time FFT waterfall from binary spectrum frames
+- RX audio playback via Web Audio API (8 kHz mono S16_LE)
 
-New:
-```bash
-radio_daemon [-r /path/to/core.ini] [-u /path/to/user.ini] [-c cpu_nr]
-```
-
-### What stays the same
-
-- `sbitx_client` commands (now symlink → `radio_client`)
-- SHM control protocol (`enable_shm_control = 1`)
-- Profile settings in `user.ini`
+No build step required — just open the file. Edit the WebSocket URL in the top bar if connecting to a remote host.
 
 ## zBitx Hardware Profile
 
