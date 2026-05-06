@@ -6,12 +6,13 @@ Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net)
 
 - **`hfsignals` backend** — embedded sBitx/zBitx DSP + ALSA path with all original hardware control (Si5351, GPIO, I2C, WM8731 codec)
 - **`hamlib` backend** — Hamlib CAT/PTT control for IC-7100, IC-7300, TS-480, etc.
-- **7 modulation modes**: LSB, USB, CW, **FM** (NBFM), **AM** (broadcast), **DRM** (Digital Radio Mondiale via Dream), and RADEv2 digital voice
+- **9 modulation modes**: LSB, USB, CW, **FM** (NBFM), **AM** (broadcast), **DRM** (Digital Radio Mondiale), RADEv2 digital voice, **FT8**, **RTTY**
+- **Digital text modes**: FT8 (8-FSK), CW (Morse via unixcw), RTTY (Baudot FSK) with unified websocket API
 - **SSB voice DSP chain**: 3-band pre-EQ, wideband compressor, pre-emphasis, DC block, limiter
 - **RX voice DSP chain**: DC block, adaptive noise reduction (libspecbleach), AGC (SLOW/MEDIUM/FAST), soft limiter
 - **Audio bridge** for websocket RX/TX streaming on both backends
-- Up to 6 profiles with frequency, mode, power, timeout, and digital-voice state
-- Websocket control/media API with binary audio frames and waterfall/spectrum
+- **Up to 9 profiles** with frequency, mode, power, timeout, and digital-voice state
+- Websocket control/media API with binary audio frames, waterfall/spectrum, and **unified digital mode commands**
 - WAV recording with remote start/stop
 - INI configuration at `/etc/sbitx/core.ini` and `/etc/sbitx/user.ini`
 - Optional CPU affinity pinning
@@ -44,12 +45,14 @@ hermes-radio-daemon/
 ```bash
 apt-get install libhamlib-dev libiniparser-dev libasound2-dev libfftw3-dev \
                 libfftw3f-dev libssl-dev libi2c-dev libcsdr-dev libspecbleach-dev \
-                libsndfile1-dev meson ninja-build pkg-config
+                libsndfile1-dev libcw-dev meson ninja-build pkg-config
 ```
 
-**libspecbleach** provides adaptive spectral noise reduction on RX (build it first from `/home/rafael2k/files/rhizomatica/hermes/libspecbleach`).
+**libspecbleach** provides adaptive spectral noise reduction on RX.
 
 **libcsdr** provides FM/AM modulation/demodulation, AGC, DC blocking, resampling, and filter design.
+
+**libunixcw** (`-lcw`) provides the CW receiver state machine (mark/space → characters).
 
 **Dream** (optional, for DRM mode): build in console mode:
 ```bash
@@ -260,7 +263,7 @@ enable_ptt = 1
 | Field | Values | Description |
 |-------|--------|-------------|
 | `freq` | Hz (integer) | Operating frequency |
-| `mode` | `USB`, `LSB`, `CW`, `FM`, `AM`, `DRM` | Modulation mode |
+| `mode` | `USB`, `LSB`, `CW`, `FM`, `AM`, `DRM`, `FT8`, `RTTY` | Modulation mode |
 | `operating_mode` | 0=full voice, 1=loopback, 2=controls only | I/O mode |
 | `bpf_low` | Hz | Low edge of DSP bandpass filter |
 | `bpf_high` | Hz | High edge of DSP bandpass filter |
@@ -278,11 +281,14 @@ enable_ptt = 1
 
 | Mode | Typical bpf_low | Typical bpf_high | Bandwidth |
 |------|-----------------|------------------|-----------|
-| SSB voice | 300 | 3000 | 2.7 kHz |
-| SSB data | 300 | 2800 | 2.5 kHz |
+| SSB voice | 50 | 3000 | 3.0 kHz |
+| SSB data | 50 | 3000 | 3.0 kHz |
 | FM (NBFM) | 100 | 7000 | 14 kHz (Carson rule: 2×5k dev + 2×2k audio) |
 | AM | 50 | 10000 | 20 kHz (broadcast audio) |
 | DRM | 100 | 6000 | 12 kHz (DRM mode B 10 kHz + margin) |
+| FT8 | 50 | 3000 | 3.0 kHz (SSB-based) |
+| CW | 500 | 900 | ~400 Hz around pitch (700 Hz) |
+| RTTY | 1300 | 1700 | ~400 Hz around mark/space (1585/1415 Hz) |
 
 ## Running
 
@@ -300,9 +306,14 @@ Standard single-sideband with the full voice DSP chain:
 - **RX**: ADC → FFT → sideband filter → rotate → IFFT → DC block → noise reduction → AGC → limiter → DAC
 - **TX**: Mic → DC block → pre-EQ → compressor → pre-emphasis → limiter → FFT → filter → sideband → rotate → IFFT → DAC
 
-### CW
+### CW (Morse code)
 
-Continuous wave mode (legacy support, tone generation via VFO).
+Uses `libunixcw` for the receiver state machine and a DDS tone generator for the transmitter:
+- **RX**: SSB USB → Goertzel single-bin tone detector → mark/space events → unixcw decoder → spool
+- **TX**: Text → Morse lookup → DDS sine + raised-cosine envelope → SSB TX
+- Configurable WPM (`cw_wpm`, default 20) and pitch (`cw_pitch`, default 700 Hz)
+- Narrow filter centred around the CW pitch
+- End-of-message: 3× word-space silence threshold
 
 ### NBFM (Narrow Band FM)
 
@@ -331,9 +342,89 @@ dream --console -I - -O - --sigsrate 48000 --inchansel 6 --audsrate 8000
 
 DRM TX is not implemented (use Dream's native transmitter if needed).
 
+### FT8 (Weak-signal digital mode)
+
+Uses vendored `ft8_lib` for encoding and `decode_ft8` pipe for decoding:
+- **TX**: Text → 77-bit LDPC → 8-FSK tones → GFSK @ 12 kHz → SSB TX
+- **RX**: SSB USB demod → audio → `decode_ft8` WAV pipe → decoded message → spool
+- 15-second slots, standard FT8 protocol
+- Vendored library at `vendor/ft8_lib/` (MIT-licensed)
+
+### RTTY (Radio Teletype — 45.45 baud FSK)
+
+Uses vendored `minimodem` FSK core (FFT-based FSK detector + Baudot codec):
+- **TX**: Text → Baudot encoding (5-bit + start/1.5 stop) → FSK tone generator @ 96 kHz → SSB TX
+- **RX**: SSB USB → 12 kHz audio → `fsk_find_frame()` → Baudot decode → spool
+- Configurable baud, mark frequency, and shift
+- End-of-message: CR+LF or 3-second idle timeout
+- Vendored library at `vendor/minimodem/` (GPLv3-licensed)
+
 ### Digital Voice (RADEv2)
 
 Neural-network-based digital voice codec. Activated per-profile with `digital_voice = 1`. Uses the vendored RADEv2 pure-C encoder/decoder at `vendor/radev2/`. The full voice DSP chain (compressor, pre-emphasis, noise reduction) is automatically bypassed when `digital_voice = 1`.
+
+### FT8 (8-FSK digital mode)
+
+Weak-signal digital mode using vendored `ft8_lib` for encoding and the `decode_ft8` binary for reception:
+- **TX**: text → 77-bit LDPC payload → 8-FSK tones → GFSK audio @ 12 kHz → SSB TX
+- **RX**: SSB USB demod → audio → `decode_ft8` pipe → decoded messages → spool
+- Standard 15-second slots, 50–3000 Hz SSB bandwidth
+- Active tone frequency configurable (`ft8_tone`, default 1000 Hz)
+
+### CW (Morse code)
+
+Uses `libunixcw` for RX decoding state machine and a DDS tone generator for TX:
+- **TX**: text → Morse lookup → DDS sine keyed by dot/dash timing → raised-cosine envelope → SSB TX
+- **RX**: SSB USB demod → Goertzel single-bin detector → mark/space events → `cw_rec_mark_begin/end()` → decoded characters → spool
+- Configurable WPM (`cw_wpm`, default 20) and pitch (`cw_pitch`, default 700 Hz)
+- End-of-message detection: 3× word-space silence (~2s at 12 WPM)
+- Narrow filter: bpf_low=500, bpf_high=900 (around 700 Hz pitch)
+
+### RTTY (Radio Teletype — 45.45 baud FSK)
+
+Uses vendored `minimodem` FSK core (FFT-based demodulator) and a Baudot FSK tone generator:
+- **TX**: text → Baudot encoding (5-bit + start/1.5 stop) → FSK tones (mark/space) → SSB TX
+- **RX**: SSB USB demod → 12 kHz audio → `fsk_find_frame()` → Baudot decode → spool
+- Configurable baud (`rtty_baud`, default 45), mark frequency (`rtty_mark`, default 1585 Hz), shift (`rtty_shift`, default 170 Hz — space = mark - shift)
+- End-of-message: CR+LF (Baudot carriage return) or 3-second idle timeout
+- Standard low-tones: mark 1585 Hz, space 1415 Hz; high tones available via config
+
+### Unified Digital Mode WebSocket API
+
+All three digital text modes (FT8/CW/RTTY) share a common interface:
+
+```json
+// Queue a message for TX (mode selected by active profile)
+{"cmd": "digi_send", "text": "CQ CQ DE CALLSIGN GRID"}
+
+// Get recent decoded/transmitted messages
+{"cmd": "digi_messages", "count": 20}
+
+// Get current digital mode configuration
+{"cmd": "digi_get_config"}
+
+// Set digital mode parameters
+{"cmd": "digi_config", "key": "cw_wpm", "value": 25}
+{"cmd": "digi_config", "key": "rtty_baud", "value": 45}
+{"cmd": "digi_config", "key": "rtty_mark", "value": 2125}
+```
+
+**Digi config keys:**
+
+| Key | Applies to | Default | Range |
+|-----|-----------|---------|-------|
+| `cw_wpm` | CW | 20 | 5–60 |
+| `cw_pitch` | CW | 700 Hz | 300–1000 |
+| `rtty_baud` | RTTY | 45 | 45–300 |
+| `rtty_mark` | RTTY | 1585 Hz | 500–3000 |
+| `rtty_shift` | RTTY | 170 Hz | 85–850 |
+
+**Spool**: all messages go to `/var/spool/hermes-digi/spool.log` in one-line format:
+```
+FT8 rx 14.074: CQ YL3JG KO26
+CW rx 14.025: CQ DE CALLSIGN K
+RTTY tx 14.080: CQ CQ DE HERMES TEST
+```
 
 ## Audio Bridge
 
@@ -357,6 +448,9 @@ Text frames use compact JSON commands:
 {"cmd":"ptt_on"}
 {"cmd":"ptt_off"}
 {"cmd":"start_recording","stream":"both"}
+{"cmd":"digi_send","text":"CQ CQ DE CALLSIGN"}
+{"cmd":"digi_messages","count":10}
+{"cmd":"digi_config","key":"cw_wpm","value":25}
 ```
 
 Binary frames for audio and waterfall:
