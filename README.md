@@ -1,6 +1,6 @@
 # hermes-radio-daemon
 
-Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net) network. Replaces the standalone `sbitx_controller` and embeds its DSP/ALSA path in-process. Supports both HF Signals (sBitx/zBitx) hardware and Hamlib-controlled CAT radios.
+Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net) network. Controls sBitx/zBitx hardware (Si5351, GPIO, WM8731 codec) and Hamlib CAT radios from a single binary. All SSB/FM/AM/DRM/CW/FT8/RTTY DSP runs directly in-process.
 
 ## Features
 
