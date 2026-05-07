@@ -213,6 +213,16 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     // printf("Enable Shared Memory Control Interface:       [%d]\n", b);
     radio_h->enable_shm_control = (bool) b;
 
+    /* websocket_url: full mongoose listener URL. Default = plaintext WS on
+     * 0.0.0.0:8080. Use wss://host:port to terminate TLS using
+     * CFG_SSL_CERT / CFG_SSL_KEY. */
+    {
+        const char *url = iniparser_getstring(ini, "main:websocket_url",
+                                              "ws://0.0.0.0:8080");
+        snprintf(radio_h->websocket_url, sizeof(radio_h->websocket_url),
+                 "%s", url);
+    }
+
     b = iniparser_getboolean(ini, "main:enable_audio_bridge", 0);
     radio_h->enable_audio_bridge = (bool) b;
 

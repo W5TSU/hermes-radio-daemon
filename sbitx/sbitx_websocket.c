@@ -33,7 +33,11 @@
 #include "sbitx_core.h"
 #include "sbitx_io.h"
 
-static const char *s_listen_on = "wss://0.0.0.0:8080";
+/* Default plaintext listener; overridden at websocket_init() time from
+ * radio_h->websocket_url (core.ini main:websocket_url). Use wss://host:port
+ * to terminate TLS using CFG_SSL_CERT / CFG_SSL_KEY. */
+#define WS_LISTEN_DEFAULT "ws://0.0.0.0:8080"
+static char s_listen_on[256] = WS_LISTEN_DEFAULT;
 static char s_web_root[1000];
 static char session_cookie[100];
 struct mg_mgr mgr;  // Event manager
@@ -92,12 +96,20 @@ static void web_despatcher(struct mg_connection *c, struct mg_ws_message *wm){
 static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     if (ev == MG_EV_ACCEPT)
     {
-        struct mg_tls_opts opts =
-            {
-                .cert = CFG_SSL_CERT,    // Certificate file
-                .certkey = CFG_SSL_KEY,  // Private key file
-            };
-        mg_tls_init(c, &opts);
+        /* TLS is only initialised when the listener was created with a wss://
+         * scheme. The unconditional mg_tls_init() that used to live here
+         * caused mongoose to log "TLS is not enabled" and drop every
+         * connection whenever the listener was plaintext (ws://) or mongoose
+         * itself was built without -DMG_TLS=MG_TLS_OPENSSL. */
+        if (strncmp(s_listen_on, "wss://", 6) == 0)
+        {
+            struct mg_tls_opts opts =
+                {
+                    .cert    = CFG_SSL_CERT,
+                    .certkey = CFG_SSL_KEY,
+                };
+            mg_tls_init(c, &opts);
+        }
     }
     else if (ev == MG_EV_OPEN)
     {
@@ -233,5 +245,15 @@ void websocket_shutdown(pthread_t *web_tid)
 void websocket_init(radio *radio_h, const char *web_path, pthread_t *web_tid)
 {
     snprintf(s_web_root, sizeof(s_web_root), "%s", web_path);
+
+    if (radio_h && radio_h->websocket_url[0])
+        snprintf(s_listen_on, sizeof(s_listen_on), "%s", radio_h->websocket_url);
+    else
+        snprintf(s_listen_on, sizeof(s_listen_on), "%s", WS_LISTEN_DEFAULT);
+
+    fprintf(stderr, "websocket_init: listening on %s%s\n",
+            s_listen_on,
+            (strncmp(s_listen_on, "wss://", 6) == 0) ? " (TLS)" : "");
+
     pthread_create(web_tid, NULL, webserver_thread_function, (void*) radio_h);
 }

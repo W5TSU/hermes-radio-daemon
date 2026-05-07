@@ -98,6 +98,7 @@ SBITX_CFLAGS = $(CFLAGS) -I. -Isbitx -Idsp -Isbitx/gpiolib -I/usr/include/csdr \
                $(RADEV2_EMBED_CPPFLAGS) $(RADEV2_EMBED_CFLAGS) \
                $(FT8_LIB_CPPFLAGS) $(FT8_LIB_CFLAGS) \
                $(MM_FSK_CPPFLAGS) $(MM_FSK_CFLAGS) \
+               -DMG_ENABLE_OPENSSL=1 -DMG_TLS=MG_TLS_OPENSSL \
                -Wno-deprecated-declarations
 SBITX_LDFLAGS = -liniparser -li2c -lssl -lcrypto -lpthread -lasound -lm -lfftw3 -lcsdr -lspecbleach -lcw
 SBITX_HDRS = $(wildcard sbitx/*.h dsp/*.h sbitx/gpiolib/*.h include/*.h \
@@ -180,6 +181,8 @@ install: radio_daemon radio_client
 	  install -m 644 config/core.ini $(DESTDIR)$(sysconfdir)/hermes/core.ini
 	test -f $(DESTDIR)$(sysconfdir)/hermes/user.ini || \
 	  install -m 644 config/user.ini $(DESTDIR)$(sysconfdir)/hermes/user.ini
+	install -d $(DESTDIR)$(sysconfdir)/hermes/web
+	install -m 644 web/index.html $(DESTDIR)$(sysconfdir)/hermes/web/index.html
 
 # ── clean ───────────────────────────────────────────────────────
 clean:

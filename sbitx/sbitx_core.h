@@ -222,6 +222,11 @@ typedef struct
     _Atomic bool enable_websocket; // this is needed for hermes-gui
     _Atomic bool enable_shm_control; // this is needed for sbitx_client
 
+    /* mongoose listener URL, e.g. "ws://0.0.0.0:8080" or
+     * "wss://0.0.0.0:8443". Read once at startup; not changed at runtime.
+     * wss:// requires CFG_SSL_CERT and CFG_SSL_KEY to exist. */
+    char websocket_url[256];
+
     // audio bridge
     _Atomic bool enable_audio_bridge;
     _Atomic uint16_t audio_sample_rate;
