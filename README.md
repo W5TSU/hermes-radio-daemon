@@ -461,7 +461,7 @@ Run `sbitx_client -h` for the full command list.
 
 ## Demo HTML Client
 
-A self-contained websocket client is provided at `config/index.html`. Open it in any browser to connect to the daemon's websocket:
+A self-contained websocket client is provided at `web/index.html`. Open it in any browser to connect to the daemon's websocket:
 
 - **Control tab**: set frequency, mode, profile (0–8), PTT on/off
 - **Digital Modes tab**: send FT8/CW/RTTY text, view decoded messages, configure WPM/pitch/baud
