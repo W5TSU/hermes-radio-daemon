@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <errno.h>
+#include <time.h>
 #include <pthread.h>
 
 #include "radio_backend.h"
@@ -285,22 +287,48 @@ static void process_radio_command(uint8_t *cmd, uint8_t *response)
     case CMD_SET_MODE:
         response[0] = CMD_RESP_ACK;
         profile = cmd[4] >> 6;
-        if (cmd[0] == 0x00 || cmd[0] == 0x03)
-            radio_backend_set_mode(radio_h, MODE_LSB, profile);
-        else if (cmd[0] == 0x01)
-            radio_backend_set_mode(radio_h, MODE_USB, profile);
-        else if (cmd[0] == 0x04)
-            radio_backend_set_mode(radio_h, MODE_CW, profile);
+        if (profile < radio_h->profiles_count)
+        {
+            /* See radio_cmds.h for the cmd[0] -> MODE_* mapping. */
+            uint16_t mode_v;
+            switch (cmd[0])
+            {
+            case 0x00: mode_v = MODE_LSB;  break;
+            case 0x01: mode_v = MODE_USB;  break;
+            case 0x02: mode_v = MODE_FM;   break;
+            case 0x03: mode_v = MODE_AM;   break;
+            case 0x04: mode_v = MODE_CW;   break;
+            case 0x05: mode_v = MODE_DRM;  break;
+            case 0x06: mode_v = MODE_FT8;  break;
+            case 0x07: mode_v = MODE_RTTY; break;
+            default:
+                response[0] = CMD_RESP_WRONG_COMMAND;
+                break;
+            }
+            if (response[0] == CMD_RESP_ACK)
+                radio_backend_set_mode(radio_h, mode_v, profile);
+        }
         break;
 
     case CMD_GET_MODE:
         profile = cmd[4] >> 6;
-        if (radio_h->profiles[profile].mode == MODE_USB)
-            response[0] = CMD_RESP_GET_MODE_USB;
-        else if (radio_h->profiles[profile].mode == MODE_LSB)
-            response[0] = CMD_RESP_GET_MODE_LSB;
-        else
-            response[0] = CMD_RESP_GET_MODE_CW;
+        if (profile >= radio_h->profiles_count)
+        {
+            response[0] = CMD_RESP_WRONG_COMMAND;
+            break;
+        }
+        switch (radio_h->profiles[profile].mode)
+        {
+        case MODE_LSB:  response[0] = CMD_RESP_GET_MODE_LSB;  break;
+        case MODE_USB:  response[0] = CMD_RESP_GET_MODE_USB;  break;
+        case MODE_CW:   response[0] = CMD_RESP_GET_MODE_CW;   break;
+        case MODE_FM:   response[0] = CMD_RESP_GET_MODE_FM;   break;
+        case MODE_AM:   response[0] = CMD_RESP_GET_MODE_AM;   break;
+        case MODE_DRM:  response[0] = CMD_RESP_GET_MODE_DRM;  break;
+        case MODE_FT8:  response[0] = CMD_RESP_GET_MODE_FT8;  break;
+        case MODE_RTTY: response[0] = CMD_RESP_GET_MODE_RTTY; break;
+        default:        response[0] = CMD_RESP_GET_MODE_USB;  break;
+        }
         break;
 
     case CMD_GET_VOLUME:
@@ -394,34 +422,51 @@ static void process_radio_command(uint8_t *cmd, uint8_t *response)
     }
 }
 
-/* SHM command dispatcher thread */
+/* SHM command dispatcher thread.
+ *
+ * Uses pthread_cond_timedwait so the worker periodically observes shutdown_
+ * even when no client is signalling cmd_condition. */
 static void *process_radio_command_thread(void *arg)
 {
     controller_conn *conn = arg;
+    bool got_signal;
 
     pthread_mutex_lock(&conn->cmd_mutex);
 
     while (!shutdown_)
     {
-        pthread_cond_wait(&conn->cmd_condition, &conn->cmd_mutex);
+        struct timespec deadline;
+        clock_gettime(CLOCK_REALTIME, &deadline);
+        deadline.tv_nsec += 200 * 1000 * 1000L; /* 200 ms */
+        if (deadline.tv_nsec >= 1000000000L)
+        {
+            deadline.tv_sec  += 1;
+            deadline.tv_nsec -= 1000000000L;
+        }
+
+        int rc = pthread_cond_timedwait(&conn->cmd_condition,
+                                        &conn->cmd_mutex,
+                                        &deadline);
 
         if (shutdown_)
-            goto exit_local;
+            break;
+
+        got_signal = (rc == 0);
+        if (!got_signal)
+            continue; /* timeout: just re-check shutdown_ and wait again */
 
         process_radio_command(conn->service_command, conn->response_service);
 
         if (conn->service_command[4] == CMD_RADIO_RESET)
         {
             shutdown_ = true;
-            pthread_mutex_unlock(&conn->cmd_mutex);
             fprintf(stderr, "\nReset command. Exiting\n");
-            return NULL;
+            break;
         }
 
         conn->response_available = true;
     }
 
-exit_local:
     pthread_mutex_unlock(&conn->cmd_mutex);
     return NULL;
 }
@@ -484,8 +529,11 @@ void shm_controller_shutdown(pthread_t *shm_tid)
 {
     controller_conn *connector = connector_local;
 
-    pthread_cond_signal(&connector->cmd_condition);
-    pthread_mutex_unlock(&connector->cmd_mutex);
+    /* shutdown_ is already set by the caller; nudge the worker so it doesn't
+     * have to wait for its next 200 ms timeout to observe the flag. The worker
+     * is the sole owner of cmd_mutex, so we must not unlock it from here. */
+    if (connector)
+        pthread_cond_signal(&connector->cmd_condition);
 
     pthread_join(*shm_tid, NULL);
 }

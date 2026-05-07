@@ -159,14 +159,20 @@ int main(int argc, char *argv[])
         if (argument_set == false)
             goto manual;
 
-        if (!strcmp(command_argument, "lsb") || !strcmp(command_argument, "LSB"))
-            srv_cmd[0] = 0x00;
-
-        if (!strcmp(command_argument, "usb") || !strcmp(command_argument, "USB"))
-            srv_cmd[0] = 0x01;
-
-        if (!strcmp(command_argument, "cw") || !strcmp(command_argument, "CW"))
-            srv_cmd[0] = 0x04;
+        /* See radio_cmds.h for the SET_MODE wire encoding. */
+        if      (!strcasecmp(command_argument, "lsb"))  srv_cmd[0] = 0x00;
+        else if (!strcasecmp(command_argument, "usb"))  srv_cmd[0] = 0x01;
+        else if (!strcasecmp(command_argument, "fm"))   srv_cmd[0] = 0x02;
+        else if (!strcasecmp(command_argument, "am"))   srv_cmd[0] = 0x03;
+        else if (!strcasecmp(command_argument, "cw"))   srv_cmd[0] = 0x04;
+        else if (!strcasecmp(command_argument, "drm"))  srv_cmd[0] = 0x05;
+        else if (!strcasecmp(command_argument, "ft8"))  srv_cmd[0] = 0x06;
+        else if (!strcasecmp(command_argument, "rtty")) srv_cmd[0] = 0x07;
+        else
+        {
+            fprintf(stderr, "Unknown mode '%s'.\n", command_argument);
+            return EXIT_FAILURE;
+        }
 
         srv_cmd[4] = CMD_SET_MODE | (profile << 6);
     }
@@ -488,6 +494,21 @@ int main(int argc, char *argv[])
             break;
         case CMD_RESP_GET_MODE_CW:
             printf("CW\n");
+            break;
+        case CMD_RESP_GET_MODE_FM:
+            printf("FM\n");
+            break;
+        case CMD_RESP_GET_MODE_AM:
+            printf("AM\n");
+            break;
+        case CMD_RESP_GET_MODE_DRM:
+            printf("DRM\n");
+            break;
+        case CMD_RESP_GET_MODE_FT8:
+            printf("FT8\n");
+            break;
+        case CMD_RESP_GET_MODE_RTTY:
+            printf("RTTY\n");
             break;
         case CMD_RESP_GET_TXRX_INTX:
             printf("INTX\n");

@@ -83,10 +83,30 @@ static const char *mode_to_string(uint16_t mode)
 {
     switch (mode)
     {
-    case MODE_LSB: return "LSB";
-    case MODE_CW:  return "CW";
-    default:       return "USB";
+    case MODE_LSB:  return "LSB";
+    case MODE_USB:  return "USB";
+    case MODE_CW:   return "CW";
+    case MODE_FM:   return "FM";
+    case MODE_AM:   return "AM";
+    case MODE_DRM:  return "DRM";
+    case MODE_FT8:  return "FT8";
+    case MODE_RTTY: return "RTTY";
+    default:        return "USB";
     }
+}
+
+static bool mode_from_string(const char *name, uint16_t *out)
+{
+    if      (!strcasecmp(name, "LSB"))  *out = MODE_LSB;
+    else if (!strcasecmp(name, "USB"))  *out = MODE_USB;
+    else if (!strcasecmp(name, "CW"))   *out = MODE_CW;
+    else if (!strcasecmp(name, "FM"))   *out = MODE_FM;
+    else if (!strcasecmp(name, "AM"))   *out = MODE_AM;
+    else if (!strcasecmp(name, "DRM"))  *out = MODE_DRM;
+    else if (!strcasecmp(name, "FT8"))  *out = MODE_FT8;
+    else if (!strcasecmp(name, "RTTY")) *out = MODE_RTTY;
+    else                                return false;
+    return true;
 }
 
 static const char *backend_to_string(radio_backend_kind backend_kind)
@@ -566,10 +586,11 @@ static void handle_ws_command(radio *radio_h, ws_client *client, const char *pay
             send_cmd_error(client, cmd, "missing mode");
             return;
         }
-        if (!strcasecmp(mode, "LSB"))
-            mode_v = MODE_LSB;
-        else if (!strcasecmp(mode, "CW"))
-            mode_v = MODE_CW;
+        if (!mode_from_string(mode, &mode_v))
+        {
+            send_cmd_error(client, cmd, "unknown mode");
+            return;
+        }
         radio_backend_set_mode(radio_h, mode_v, (uint32_t) profile);
         send_cmd_result(client, cmd, true, "OK");
         return;
@@ -896,10 +917,11 @@ static void handle_ws_command(radio *radio_h, ws_client *client, const char *pay
             send_cmd_error(client, cmd, "missing text");
             return;
         }
-        // append to spool
-        char msg[512];
-        snprintf(msg, sizeof(msg), "\"digi_send\": \"%s\"", text);
-        send_cmd_result(client, cmd, true, "queued");
+        /* No TX queue is wired up: neither the hamlib backend nor the embedded
+         * sBitx exposes a public entry point to inject FT8/CW/RTTY text into
+         * the active modem. Until that path lands, refuse honestly instead of
+         * pretending the message was queued. */
+        send_cmd_error(client, cmd, "not implemented");
         return;
     }
 

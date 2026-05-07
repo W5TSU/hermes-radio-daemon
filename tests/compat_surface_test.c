@@ -448,12 +448,56 @@ static void test_shm_profile_and_message_semantics(void)
     assert(backend_call.profile == 1);
     assert(radio_h.profiles[1].freq == 7215000);
 
+    /* SET_MODE wire encoding (see radio_cmds.h):
+     *   0x00 LSB  0x01 USB  0x02 FM  0x03 AM
+     *   0x04 CW   0x05 DRM  0x06 FT8 0x07 RTTY
+     */
     memset(cmd, 0, sizeof(cmd));
-    cmd[0] = 0x03;
+    cmd[0] = 0x00;
     cmd[4] = CMD_SET_MODE | (1u << 6);
     process_radio_command(cmd, response);
     assert(response[0] == CMD_RESP_ACK);
     assert(backend_call.mode == MODE_LSB);
+    assert(radio_h.profiles[1].mode == MODE_LSB);
+
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = 0x02;
+    cmd[4] = CMD_SET_MODE | (1u << 6);
+    process_radio_command(cmd, response);
+    assert(response[0] == CMD_RESP_ACK);
+    assert(backend_call.mode == MODE_FM);
+    assert(radio_h.profiles[1].mode == MODE_FM);
+
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = 0x07;
+    cmd[4] = CMD_SET_MODE | (1u << 6);
+    process_radio_command(cmd, response);
+    assert(response[0] == CMD_RESP_ACK);
+    assert(backend_call.mode == MODE_RTTY);
+    assert(radio_h.profiles[1].mode == MODE_RTTY);
+
+    /* GET_MODE should now report the extended mode constant. */
+    memset(cmd, 0, sizeof(cmd));
+    cmd[4] = CMD_GET_MODE | (1u << 6);
+    process_radio_command(cmd, response);
+    assert(response[0] == CMD_RESP_GET_MODE_RTTY);
+
+    /* Unknown mode index should NACK. */
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = 0x42;
+    cmd[4] = CMD_SET_MODE | (1u << 6);
+    process_radio_command(cmd, response);
+    assert(response[0] == CMD_RESP_WRONG_COMMAND);
+    /* Mode in the profile must not have changed. */
+    assert(radio_h.profiles[1].mode == MODE_RTTY);
+
+    /* Reset profile 1 to LSB so subsequent assertions in this test see a
+     * clean state. */
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = 0x00;
+    cmd[4] = CMD_SET_MODE | (1u << 6);
+    process_radio_command(cmd, response);
+    assert(response[0] == CMD_RESP_ACK);
     assert(radio_h.profiles[1].mode == MODE_LSB);
 
     pthread_mutex_lock(&radio_h.message_mutex);

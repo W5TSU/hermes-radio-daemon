@@ -23,8 +23,8 @@
 #ifndef RADIO_H_
 #define RADIO_H_
 
-#define CFG_RADIO_PATH "/etc/sbitx/core.ini"
-#define CFG_USER_PATH "/etc/sbitx/user.ini"
+#define CFG_RADIO_PATH "/etc/hermes/core.ini"
+#define CFG_USER_PATH "/etc/hermes/user.ini"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,10 +34,17 @@
 
 #include <iniparser.h>
 
-/* Radio mode definitions */
-#define MODE_LSB 0
-#define MODE_USB 1
-#define MODE_CW  2
+/* Radio mode definitions.
+ * Numbering matches sbitx/sbitx_core.h so MODE_* values cross the SHM /
+ * websocket boundaries unambiguously between the two backends. */
+#define MODE_LSB  0
+#define MODE_USB  1
+#define MODE_CW   2
+#define MODE_FM   3
+#define MODE_AM   4
+#define MODE_DRM  5
+#define MODE_FT8  6
+#define MODE_RTTY 7
 
 /* AGC settings */
 #define AGC_OFF    0
@@ -53,8 +60,14 @@
 #define IN_RX 0
 #define IN_TX 1
 
-/* Maximum number of radio profiles */
-#define MAX_RADIO_PROFILES 4
+/* Maximum number of radio profiles. Matches sbitx/sbitx_core.h.
+ *
+ * Note: the SHM wire format packs profile in the upper 2 bits of cmd[4]
+ * (radio_cmds.h), so SHM clients can only address profiles 0..3 directly in
+ * per-profile commands. Profiles 4..8 are reachable via CMD_SET_PROFILE
+ * (which makes them the active profile) and via the websocket API, which
+ * carries profile as a JSON field. */
+#define MAX_RADIO_PROFILES 9
 #define AUDIO_DEVICE_NAME_MAX 256
 #define WEBSOCKET_BIND_MAX 128
 #define RECORDING_PATH_MAX 512

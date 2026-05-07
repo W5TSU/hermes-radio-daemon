@@ -44,6 +44,16 @@ typedef struct {
     bool capture;
 } media_thread_ctx;
 
+/* Spectrum FFT plan is built once per process (capture and playback threads
+ * both run compute_spectrum, so the plan + I/O buffers are guarded by a
+ * mutex). Rebuilding the plan per audio frame as the previous code did
+ * caused mutex contention inside FFTW's planner and pointless allocations. */
+static fftwf_plan        g_spectrum_plan;
+static float             g_spectrum_in[SPECTRUM_FFT_SIZE];
+static fftwf_complex     g_spectrum_out[(SPECTRUM_FFT_SIZE / 2) + 1];
+static pthread_mutex_t   g_spectrum_plan_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool              g_spectrum_plan_ready = false;
+
 static bool stream_matches(const char *stream_name, const char *candidate);
 
 static void wav_write_header(FILE *fp, uint32_t sample_rate, uint32_t data_bytes)
@@ -279,37 +289,38 @@ static void update_spectrum_locked(radio *radio_h, bool tx, const float *bins)
 static void compute_spectrum(radio *radio_h, bool tx, const int16_t *samples, size_t nsamples)
 {
     static const float floor_db = -120.0f;
-    float input[SPECTRUM_FFT_SIZE];
-    fftwf_complex output[(SPECTRUM_FFT_SIZE / 2) + 1];
     float bins[WATERFALL_BINS];
-    fftwf_plan plan;
 
     if (nsamples < SPECTRUM_FFT_SIZE)
         return;
+
+    pthread_mutex_lock(&g_spectrum_plan_mutex);
+
+    if (!g_spectrum_plan_ready)
+    {
+        pthread_mutex_unlock(&g_spectrum_plan_mutex);
+        return;
+    }
 
     for (size_t i = 0; i < SPECTRUM_FFT_SIZE; i++)
     {
         float window = 0.5f - 0.5f * cosf((2.0f * (float) M_PI * i) /
                                           (float) (SPECTRUM_FFT_SIZE - 1));
-        input[i] = ((float) samples[i] / 32768.0f) * window;
+        g_spectrum_in[i] = ((float) samples[i] / 32768.0f) * window;
     }
 
-    plan = fftwf_plan_dft_r2c_1d(SPECTRUM_FFT_SIZE, input, output, FFTW_ESTIMATE);
-    if (!plan)
-        return;
-
-    fftwf_execute(plan);
-    fftwf_destroy_plan(plan);
+    fftwf_execute(g_spectrum_plan);
 
     for (size_t i = 0; i < WATERFALL_BINS; i++)
     {
-        size_t src = i;
-        float re = output[src][0];
-        float im = output[src][1];
+        float re = g_spectrum_out[i][0];
+        float im = g_spectrum_out[i][1];
         float mag = (re * re) + (im * im);
         float db = 10.0f * log10f(mag + 1.0e-12f);
         bins[i] = db < floor_db ? floor_db : db;
     }
+
+    pthread_mutex_unlock(&g_spectrum_plan_mutex);
 
     radio_h->spectrum_sample_rate = radio_h->audio_sample_rate;
     update_spectrum_locked(radio_h, tx, bins);
@@ -502,6 +513,19 @@ bool radio_media_init(radio *radio_h, pthread_t *capture_tid, pthread_t *playbac
     radio_h->rx_spectrum_valid = false;
     radio_h->tx_spectrum_valid = false;
 
+    pthread_mutex_lock(&g_spectrum_plan_mutex);
+    if (!g_spectrum_plan_ready)
+    {
+        g_spectrum_plan = fftwf_plan_dft_r2c_1d(SPECTRUM_FFT_SIZE,
+                                                g_spectrum_in,
+                                                g_spectrum_out,
+                                                FFTW_ESTIMATE);
+        g_spectrum_plan_ready = (g_spectrum_plan != NULL);
+    }
+    pthread_mutex_unlock(&g_spectrum_plan_mutex);
+    if (!g_spectrum_plan_ready)
+        fprintf(stderr, "radio_media: warning: spectrum FFT plan unavailable\n");
+
     if (!ring_init(&radio_h->rx_audio_ring, queue_samples) ||
         !ring_init(&radio_h->tx_audio_ring, queue_samples))
     {
@@ -547,6 +571,15 @@ void radio_media_shutdown(radio *radio_h, pthread_t *capture_tid, pthread_t *pla
     ring_destroy(&radio_h->rx_audio_ring);
     ring_destroy(&radio_h->tx_audio_ring);
     pthread_mutex_destroy(&radio_h->spectrum_mutex);
+
+    pthread_mutex_lock(&g_spectrum_plan_mutex);
+    if (g_spectrum_plan_ready)
+    {
+        fftwf_destroy_plan(g_spectrum_plan);
+        g_spectrum_plan = NULL;
+        g_spectrum_plan_ready = false;
+    }
+    pthread_mutex_unlock(&g_spectrum_plan_mutex);
 }
 
 void radio_media_push_tx_audio(radio *radio_h, const int16_t *samples, size_t nsamples)

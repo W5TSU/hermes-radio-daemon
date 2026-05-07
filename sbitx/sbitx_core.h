@@ -23,8 +23,8 @@
 #ifndef SBITX_CORE_H_
 #define SBITX_CORE_H_
 
-#define CFG_CORE_PATH "/etc/sbitx/core.ini"
-#define CFG_USER_PATH "/etc/sbitx/user.ini"
+#define CFG_CORE_PATH "/etc/hermes/core.ini"
+#define CFG_USER_PATH "/etc/hermes/user.ini"
 #define CFG_WEBSOCKET_PATH "/etc/sbitx/web"
 #define CFG_SSL_CERT "/etc/ssl/certs/hermes.radio.crt"
 #define CFG_SSL_KEY "/etc/ssl/private/hermes.radio.key"

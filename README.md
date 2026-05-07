@@ -14,7 +14,7 @@ Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net)
 - **Up to 9 profiles** with frequency, mode, power, timeout, and digital-voice state
 - Websocket control/media API with binary audio frames, waterfall/spectrum, and **unified digital mode commands**
 - WAV recording with remote start/stop
-- INI configuration at `/etc/sbitx/core.ini` and `/etc/sbitx/user.ini`
+- INI configuration at `/etc/hermes/core.ini` and `/etc/hermes/user.ini`
 - Optional CPU affinity pinning
 - zBitx hardware profile support (different GPIO layout, BFO, TX/RX switching)
 
@@ -79,14 +79,14 @@ Installs to `/usr/bin/` and `/etc/sbitx/` (configs are only placed if they do no
 - `/usr/bin/radio_daemon`
 - `/usr/bin/radio_client`
 - `/usr/bin/sbitx_client` → symlink → `radio_client`
-- `/etc/sbitx/core.ini`
-- `/etc/sbitx/user.ini`
+- `/etc/hermes/core.ini`
+- `/etc/hermes/user.ini`
 
 ## Configuration
 
 All configuration lives in two files under `/etc/sbitx/`.
 
-### `/etc/sbitx/core.ini` — radio hardware
+### `/etc/hermes/core.ini` — radio hardware
 
 ```ini
 [main]
@@ -131,7 +131,7 @@ recording_dir = /var/lib/hermes-radio-daemon
 ; scale = 1.5
 ```
 
-### `/etc/sbitx/user.ini` — profiles
+### `/etc/hermes/user.ini` — profiles
 
 ```ini
 [main]
@@ -296,7 +296,7 @@ enable_ptt = 1
 radio_daemon [-r /path/to/core.ini] [-u /path/to/user.ini] [-c cpu_nr] [-h]
 ```
 
-Defaults: `-r /etc/sbitx/core.ini` `-u /etc/sbitx/user.ini`.
+Defaults: `-r /etc/hermes/core.ini` `-u /etc/hermes/user.ini`.
 
 ## Modulation Modes
 

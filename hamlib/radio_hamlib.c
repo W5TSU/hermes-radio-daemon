@@ -236,15 +236,25 @@ static void hamlib_apply_profile(radio *radio_h, uint32_t profile)
                            "hamlib_apply_profile");
 }
 
-/* Map internal MODE_* to Hamlib rmode_t */
+/* Map internal MODE_* to Hamlib rmode_t.
+ *
+ * FM/AM/RTTY have direct Hamlib counterparts. DRM has no Hamlib mode (DRM is
+ * decoded externally by Dream from a USB/IQ stream), so the rig is parked in
+ * USB. FT8 is just SSB with audio decoded externally; we use PKTUSB so radios
+ * that distinguish data from voice select the data audio path. */
 static rmode_t mode_to_hamlib(uint16_t mode)
 {
     switch (mode)
     {
-    case MODE_USB: return RIG_MODE_USB;
-    case MODE_LSB: return RIG_MODE_LSB;
-    case MODE_CW:  return RIG_MODE_CW;
-    default:       return RIG_MODE_USB;
+    case MODE_USB:  return RIG_MODE_USB;
+    case MODE_LSB:  return RIG_MODE_LSB;
+    case MODE_CW:   return RIG_MODE_CW;
+    case MODE_FM:   return RIG_MODE_FM;
+    case MODE_AM:   return RIG_MODE_AM;
+    case MODE_RTTY: return RIG_MODE_RTTY;
+    case MODE_DRM:  return RIG_MODE_USB;
+    case MODE_FT8:  return RIG_MODE_PKTUSB;
+    default:        return RIG_MODE_USB;
     }
 }
 
@@ -257,7 +267,29 @@ static uint16_t hamlib_to_mode(rmode_t hmode)
         return MODE_LSB;
     if (hmode == RIG_MODE_CW || hmode == RIG_MODE_CWR)
         return MODE_CW;
+    if (hmode == RIG_MODE_FM || hmode == RIG_MODE_FMN)
+        return MODE_FM;
+    if (hmode == RIG_MODE_AM || hmode == RIG_MODE_AMS)
+        return MODE_AM;
+    if (hmode == RIG_MODE_RTTY || hmode == RIG_MODE_RTTYR)
+        return MODE_RTTY;
     return MODE_USB;
+}
+
+static const char *mode_to_string(uint16_t mode)
+{
+    switch (mode)
+    {
+    case MODE_LSB:  return "LSB";
+    case MODE_USB:  return "USB";
+    case MODE_CW:   return "CW";
+    case MODE_FM:   return "FM";
+    case MODE_AM:   return "AM";
+    case MODE_DRM:  return "DRM";
+    case MODE_FT8:  return "FT8";
+    case MODE_RTTY: return "RTTY";
+    default:        return "USB";
+    }
 }
 
 bool radio_hamlib_init(radio *radio_h)
@@ -384,10 +416,8 @@ void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
     }
 
     char key[64];
-    const char *mode_str = (mode == MODE_USB) ? "USB" :
-                           (mode == MODE_LSB) ? "LSB" : "CW";
     snprintf(key, sizeof(key), "profile%u:mode", profile);
-    cfg_set(radio_h, radio_h->cfg_user, key, mode_str);
+    cfg_set(radio_h, radio_h->cfg_user, key, mode_to_string(mode));
     radio_h->cfg_user_dirty = true;
 }
 

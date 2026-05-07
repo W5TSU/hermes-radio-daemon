@@ -158,6 +158,25 @@
 #define CMD_RESP_GET_MODE_USB 0x18
 #define CMD_RESP_GET_MODE_LSB 0x19
 #define CMD_RESP_GET_MODE_CW 0x1a
+/* Extended modes (matching MODE_* numbering in radio.h); response codes
+ * occupy 0x2b..0x2f (the next free slots after CMD_RESP_GET_DIGITAL_VOICE_OFF
+ * at 0x2a). */
+#define CMD_RESP_GET_MODE_FM   0x2b
+#define CMD_RESP_GET_MODE_AM   0x2c
+#define CMD_RESP_GET_MODE_DRM  0x2d
+#define CMD_RESP_GET_MODE_FT8  0x2e
+#define CMD_RESP_GET_MODE_RTTY 0x2f
+
+/* CMD_SET_MODE wire encoding: cmd[0] carries the mode index.
+ * Legacy values 0x00 (LSB), 0x01 (USB) and 0x04 (CW) are preserved so older
+ * clients keep working; new values are added for the extra modes:
+ *
+ *   0x00 LSB    0x01 USB    0x02 FM    0x03 AM
+ *   0x04 CW     0x05 DRM    0x06 FT8   0x07 RTTY
+ *
+ * Note on profiles: profile is encoded in the upper 2 bits of cmd[4]
+ * (radio_cmds.h was originally designed for a 4-profile radio). SHM clients
+ * can only address profiles 0..3 directly in per-profile commands. */
 
 #define CMD_RESP_GET_TXRX_INTX 0x1b
 #define CMD_RESP_GET_TXRX_INRX 0x1c

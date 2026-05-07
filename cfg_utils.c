@@ -344,12 +344,15 @@ bool init_config_user(radio *radio_h, const char *ini_name)
 
         snprintf(key, sizeof(key), "profile%d:mode", k);
         s = iniparser_getstring(ini, key, "USB");
-        if (!strcmp(s, "LSB"))
-            radio_h->profiles[k].mode = MODE_LSB;
-        else if (!strcmp(s, "CW"))
-            radio_h->profiles[k].mode = MODE_CW;
-        else
-            radio_h->profiles[k].mode = MODE_USB;
+        if      (!strcasecmp(s, "LSB"))  radio_h->profiles[k].mode = MODE_LSB;
+        else if (!strcasecmp(s, "USB"))  radio_h->profiles[k].mode = MODE_USB;
+        else if (!strcasecmp(s, "CW"))   radio_h->profiles[k].mode = MODE_CW;
+        else if (!strcasecmp(s, "FM"))   radio_h->profiles[k].mode = MODE_FM;
+        else if (!strcasecmp(s, "AM"))   radio_h->profiles[k].mode = MODE_AM;
+        else if (!strcasecmp(s, "DRM"))  radio_h->profiles[k].mode = MODE_DRM;
+        else if (!strcasecmp(s, "FT8"))  radio_h->profiles[k].mode = MODE_FT8;
+        else if (!strcasecmp(s, "RTTY")) radio_h->profiles[k].mode = MODE_RTTY;
+        else                             radio_h->profiles[k].mode = MODE_USB;
 
         snprintf(key, sizeof(key), "profile%d:speaker_level", k);
         i = iniparser_getint(ini, key, 50);
