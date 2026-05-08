@@ -37,10 +37,22 @@ label { color: #080; }
 
 <div class="panel row">
   <label>WS:</label>
-  <input type="text" id="ws-url" value="ws://localhost:8080" size="24">
+  <input type="text" id="ws-url" size="32">
   <button id="connect" onclick="ws_connect()">Connect</button>
   <span id="status" class="disconnected">disconnected</span>
 </div>
+<script>
+  // Default the WS URL to the host this page was served from, picking
+  // ws:// or wss:// to match the page protocol so a https:// page doesn't
+  // try to open a mixed-content ws://.
+  (function() {
+    var isTLS = window.location.protocol === 'https:';
+    var host  = window.location.hostname || 'localhost';
+    var port  = window.location.port || (isTLS ? '8080' : '8080');
+    document.getElementById('ws-url').value =
+      (isTLS ? 'wss://' : 'ws://') + host + ':' + port;
+  })();
+</script>
 
 <!-- Tabs -->
 <div style="margin-top: 10px;">
@@ -191,8 +203,12 @@ function ws_connect() {
 function handle_text(data) {
   try {
     var j = JSON.parse(data);
-    if (j.cmd === 'get_state' && j.ok) {
-      $('freq').value = j.freq || '';
+    // State frames are emitted both as a reply to {cmd:"get_state"} and
+    // as periodic broadcasts; both are tagged "type":"state". The
+    // server doesn't echo a "cmd" field on those, so key on type.
+    if (j.type === 'state') {
+      if (j.frequency !== undefined || j.freq !== undefined)
+        $('freq').value = j.frequency !== undefined ? j.frequency : j.freq;
       if (j.profile !== undefined) $('profile').value = j.profile;
       if (j.mode) $('mode').value = j.mode;
       if (j.txrx_state !== undefined) {
@@ -216,8 +232,10 @@ function handle_text(data) {
       if (j.rtty_mark) $('rtty_mark').value = j.rtty_mark;
       if (j.rtty_shift) $('rtty_shift').value = j.rtty_shift;
     }
-    if (j.cmd === 'digi_config' || j.cmd === 'digi_send')
-      $('digi-config-status').textContent = j.status || j.ok ? 'OK' : 'Failed';
+    if (j.cmd === 'digi_config' || j.cmd === 'digi_send') {
+      var msg = j.ok ? (j.status || 'OK') : ('Failed: ' + (j.error || ''));
+      $('digi-config-status').textContent = j.cmd + ': ' + msg;
+    }
   } catch(e) {}
 }
 
@@ -248,8 +266,12 @@ function send_digi() {
 }
 
 function set_digi_config(key) {
-  send_cmd('digi_config', 'key', key);
-  send_cmd('digi_config', 'value', $(key).value);
+  // The handler wants {cmd:"digi_config", key, value} in a single
+  // message; send_cmd takes one key/val pair so build the JSON inline.
+  if (!ws) return;
+  var v = parseInt($(key).value);
+  if (isNaN(v)) return;
+  ws.send(JSON.stringify({ cmd: 'digi_config', key: key, value: v }));
 }
 
 function ptt_toggle() {

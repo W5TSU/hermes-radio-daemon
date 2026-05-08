@@ -6,14 +6,14 @@ Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net)
 
 - **`hfsignals` backend** — embedded sBitx/zBitx DSP + ALSA path with all original hardware control (Si5351, GPIO, I2C, WM8731 codec)
 - **`hamlib` backend** — Hamlib CAT/PTT control for IC-7100, IC-7300, TS-480, etc.
-- **9 modulation modes**: LSB, USB, CW, **FM** (NBFM), **AM** (broadcast), **DRM** (Digital Radio Mondiale), RADEv2 digital voice, **FT8**, **RTTY**
-- **Digital text modes**: FT8 (8-FSK), CW (Morse via unixcw), RTTY (Baudot FSK) with unified websocket API
+- **8 modulation modes**: LSB, USB, CW, **FM** (NBFM), **AM** (broadcast), **DRM** (Digital Radio Mondiale), **FT8**, **RTTY**, plus RADEv2 digital voice on top of USB
+- **Digital text modes**: FT8 (8-FSK), CW (Morse via unixcw), RTTY (Baudot FSK) with unified websocket API and a real outbound text queue (`digi_send`)
 - **SSB voice DSP chain**: 3-band pre-EQ, wideband compressor, pre-emphasis, DC block, limiter
 - **RX voice DSP chain**: DC block, adaptive noise reduction (libspecbleach), AGC (SLOW/MEDIUM/FAST), soft limiter
-- **Audio bridge** for websocket RX/TX streaming on both backends
+- **Audio bridge** for websocket RX/TX streaming, RX/TX spectrum waterfall, and `.wav` recording — on both backends, sharing the same audio rings
 - **Up to 9 profiles** with frequency, mode, power, timeout, and digital-voice state
-- Websocket control/media API with binary audio frames, waterfall/spectrum, and **unified digital mode commands**
-- WAV recording with remote start/stop
+- **Single mongoose-based websocket server** speaking one JSON dialect for both backends, with `ws://` and `wss://` (TLS) support out of the box
+- WAV recording with remote start/stop on both backends
 - INI configuration at `/etc/hermes/core.ini` and `/etc/hermes/user.ini`
 - Optional CPU affinity pinning
 - zBitx hardware profile support (different GPIO layout, BFO, TX/RX switching)
@@ -30,15 +30,33 @@ Radio control daemon for the [HERMES](https://github.com/Rhizomatica/hermes-net)
 
 ```
 hermes-radio-daemon/
-├── sbitx/         HF Signals backend (GPIO, I2C, Si5351, ALSA, config)
-├── hamlib/        Hamlib CAT backend (control, media bridge, pipeline)
-├── dsp/           SSB DSP + FM/AM demodulators + DRM (Dream subprocess)
-├── vendor/radev2/ RADEv2 pure-C encoder/decoder (digital voice)
-├── vendor/radev1/ RADAE v1 pure-C library (available for future use)
-├── config/        Sample core.ini and user.ini
-├── include/       SHM protocol headers (sbitx_io.h, radio_cmds.h)
-└── tests/         Regression tests
+├── radio.h                  Unified radio + radio_profile structs (one per process)
+├── radio_backend.{c,h}      Backend vtable dispatch
+├── radio_daemon.c           main(): arg parse, backend detect, dispatch
+├── radio_daemon_core.c      Backend-neutral run loop (signal handler, init, join)
+├── radio_websocket.c        Mongoose-based ws/wss server (one for both backends)
+├── radio_media.c            Audio rings, WAV recording, spectrum FFT
+├── radio_pipeline.c         Per-backend capability descriptor
+├── radio_shm.c              SHM command dispatcher (sbitx_client wire protocol)
+├── cfg_utils.c              INI parser, dirty-flag writer thread, digi_tx_queue
+├── mongoose.c               Mongoose 7.20 (HTTP/WS/TLS transport)
+├── hamlib/                  Hamlib backend (radio_hamlib.{c,h}) — only this is hamlib-specific
+├── sbitx/                   HF Signals hardware backend (GPIO, I2C, Si5351, ALSA, encoders)
+├── dsp/                     SSB DSP + FM/AM demodulators + DRM (Dream subprocess) + digi encoders
+├── vendor/radev2/           RADEv2 pure-C encoder/decoder (digital voice)
+├── vendor/radev1/           RADAE v1 pure-C library (available for future use)
+├── vendor/ft8_lib/          Vendored ft8_lib (MIT)
+├── vendor/minimodem/        Vendored minimodem FSK core (GPLv3)
+├── config/                  Sample core.ini and user.ini
+├── include/                 SHM protocol headers (sbitx_io.h, radio_cmds.h)
+├── web/                     Self-contained demo HTML client (index.html)
+└── tests/                   Regression tests
 ```
+
+Each backend exposes its `radio_backend_ops` vtable (`hamlib_backend_ops` in
+`hamlib/radio_hamlib.c`, `sbitx_backend_ops` in `sbitx/sbitx_core.c`); all
+backend implementation functions are file-local statics. Adding a new
+backend = one new file with a vtable.
 
 ## Dependencies
 
@@ -109,12 +127,25 @@ reflected_threshold = 25        ; vswr * 10, 0 = disabled
 enable_websocket = 0
 enable_shm_control = 1
 
-; Audio bridge (works with both backends)
+; Mongoose listener URL. ws://host:port for plaintext, wss://host:port
+; to terminate TLS using the cert/key paths defined in radio.h
+; (CFG_SSL_CERT and CFG_SSL_KEY — defaults /etc/ssl/certs/hermes.radio.crt
+; and /etc/ssl/private/hermes.radio.key).
+websocket_url = ws://0.0.0.0:8080
+
+; Audio bridge (works with both backends — hfsignals taps the
+; embedded ALSA path, hamlib opens capture_device/playback_device)
 enable_audio_bridge = 0
 audio_sample_rate = 8000
 
 ; Dream DRM receiver binary path
 dream_path = /usr/bin/dream
+
+; FT8/CW/RTTY message spool directory (consumed by digi_messages)
+digi_spool_dir = /var/spool/hermes-digi
+
+; WAV recording directory (start_recording / stop_recording websocket cmds)
+recording_dir = /var/lib/hermes-radio-daemon
 
 ; Hamlib-only settings (ignored by hfsignals):
 rig_pathname = /dev/ttyUSB0
@@ -122,7 +153,6 @@ serial_rate = 9600
 ptt_type = RIG
 capture_device = default
 playback_device = default
-recording_dir = /var/lib/hermes-radio-daemon
 
 ; Per-band TX power calibration (scale = multiplier):
 ; [tx_band0]
@@ -411,7 +441,10 @@ Enable with `enable_audio_bridge = 1` in `core.ini`. Sample rate configurable vi
 
 ## Websocket Control
 
-When `enable_websocket = 1`:
+When `enable_websocket = 1` the daemon listens on the URL given by
+`websocket_url` (default `ws://0.0.0.0:8080`). Set it to
+`wss://0.0.0.0:8443` (or any host:port) to terminate TLS using the
+cert/key paths from `radio.h:CFG_SSL_CERT` /`CFG_SSL_KEY`.
 
 Text frames use compact JSON commands:
 ```json
@@ -468,7 +501,11 @@ A self-contained websocket client is provided at `web/index.html`. Open it in an
 - **Spectrum tab**: real-time FFT waterfall from binary spectrum frames
 - RX audio playback via Web Audio API (8 kHz mono S16_LE)
 
-No build step required — just open the file. Edit the WebSocket URL in the top bar if connecting to a remote host.
+No build step required — the daemon serves it directly when
+`enable_websocket = 1` (open `https://<host>:8080/index.html` for wss
+or `http://<host>:8080/index.html` for ws). The page auto-detects
+`ws://` vs `wss://` from its own URL. You can also open `web/index.html`
+locally as a file:// and type the WebSocket URL into the top bar.
 
 ## zBitx Hardware Profile
 

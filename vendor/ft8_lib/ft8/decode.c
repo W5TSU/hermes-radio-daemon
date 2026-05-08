@@ -13,6 +13,7 @@
 //   y - increase in signal level dB when adding a weaker independent signal
 //   x - specific relative strength of the weaker signal in dB
 // Table index corresponds to x in dB (index 0: 0 dB, index 1: -1 dB etc)
+__attribute__((unused))
 static const float db_power_sum[40] = {
     3.01029995663981f, 2.53901891043867f, 2.1244260279434f, 1.76434862436485f, 1.45540463109294f,
     1.19331048066095f, 0.973227937086954f, 0.790097496525665f, 0.638920341433796f, 0.514969420252302f,
@@ -47,6 +48,7 @@ static void heapify_up(ftx_candidate_t heap[], int heap_size);
 static void ftx_normalize_logl(float* log174);
 static void ft4_extract_symbol(const WF_ELEM_T* wf, float* logl);
 static void ft8_extract_symbol(const WF_ELEM_T* wf, float* logl);
+__attribute__((unused))
 static void ft8_decode_multi_symbols(const WF_ELEM_T* wf, int num_bins, int n_syms, int bit_idx, float* log174);
 
 static const WF_ELEM_T* get_cand_mag(const ftx_waterfall_t* wf, const ftx_candidate_t* candidate)
@@ -508,6 +510,7 @@ static void ft8_extract_symbol(const WF_ELEM_T* wf, float* logl)
 }
 
 // Compute unnormalized log likelihood log(p(1) / p(0)) of bits corresponding to several FSK symbols at once
+__attribute__((unused))
 static void ft8_decode_multi_symbols(const WF_ELEM_T* wf, int num_bins, int n_syms, int bit_idx, float* log174)
 {
     const int n_bits = 3 * n_syms;
