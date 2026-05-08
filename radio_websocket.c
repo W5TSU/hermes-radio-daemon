@@ -362,8 +362,11 @@ static void handle_ws_command(radio *radio_h, struct mg_connection *c,
     if (!strcmp(cmd, "set_bfo") && extract_json_int_any(payload, "frequency", "value", &value))
     { radio_backend_set_bfo(radio_h, (uint32_t) value); send_cmd_result(c, cmd, true, "OK"); return; }
 
-    if (!strcmp(cmd, "get_fwd")) { send_value_number(c, cmd, radio_backend_get_fwd_power(radio_h)); return; }
-    if (!strcmp(cmd, "get_ref")) { send_value_number(c, cmd, radio_backend_get_swr(radio_h));       return; }
+    if (!strcmp(cmd, "get_fwd"))       { send_value_number(c, cmd, radio_backend_get_fwd_power(radio_h)); return; }
+    /* "get_ref" historically returns SWR (pre-existing wire behaviour);
+     * "get_ref_power" returns the actual reflected power reading. */
+    if (!strcmp(cmd, "get_ref"))       { send_value_number(c, cmd, radio_backend_get_swr(radio_h));       return; }
+    if (!strcmp(cmd, "get_ref_power")) { send_value_number(c, cmd, radio_backend_get_ref_power(radio_h)); return; }
 
     if (!strcmp(cmd, "get_led_status"))      { send_value_string(c, cmd, radio_h->system_is_ok        ? "LED_ON" : "LED_OFF"); return; }
     if (!strcmp(cmd, "set_led_status") && extract_json_int_any(payload, "enabled", "value", &value))

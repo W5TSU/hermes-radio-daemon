@@ -454,6 +454,9 @@ Text frames use compact JSON commands:
 {"cmd":"set_mode","profile":0,"value":"USB"}
 {"cmd":"ptt_on"}
 {"cmd":"ptt_off"}
+{"cmd":"get_fwd"}                       // forward power
+{"cmd":"get_ref_power"}                 // reflected power
+{"cmd":"get_ref"}                       // SWR (legacy: name historically returned SWR)
 {"cmd":"start_recording","stream":"both"}
 {"cmd":"digi_send","text":"CQ CQ DE CALLSIGN"}
 {"cmd":"digi_messages","count":10}
