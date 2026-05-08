@@ -299,6 +299,8 @@ typedef struct {
     /* ── interface enables ───────────────────────────────────────── */
     _Atomic bool enable_shm_control;
     _Atomic bool enable_websocket;
+    bool rig_server_enable;
+    int rig_server_port;
     _Atomic bool enable_audio_bridge;
 
     char websocket_url[WEBSOCKET_URL_MAX];   /* full ws:// or wss:// URL */

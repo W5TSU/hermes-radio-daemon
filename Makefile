@@ -7,7 +7,7 @@
 
 CC      = gcc
 CFLAGS  = -Ofast -Wall -std=gnu11 -fstack-protector \
-          -I. -I/usr/include/iniparser -I/usr/include/csdr -Iinclude \
+          -I. -Ihamlib -I/usr/include/iniparser -I/usr/include/csdr -Iinclude \
           -Wno-deprecated-declarations
 LDFLAGS = -liniparser -lhamlib -lasound -lcrypto -lssl -lfftw3f -lfftw3 \
           -lpthread -lm -li2c -lcsdr -lspecbleach -lcw
@@ -39,7 +39,7 @@ MM_FSK_OBJS       = $(MM_FSK_SRCS:.c=.o)
 all: radio_daemon radio_client
 
 TEST_CFLAGS = -O0 -Wall -Wextra -std=gnu11 -fstack-protector \
-              -I. -I/usr/include/iniparser -Iinclude
+              -I. -Ihamlib -I/usr/include/iniparser -Iinclude
 TEST_BINS = tests/backend_selection_test tests/compat_surface_test
 
 # ── daemon-level objects ────────────────────────────────────────
@@ -48,6 +48,7 @@ DAEMON_TOP_OBJS = radio_daemon.o \
                   radio_daemon_core.o \
                   radio_pipeline.o \
                   hamlib/radio_hamlib.o \
+                  hamlib/rig_server.o \
                   radio_media.o \
                   radio_shm.o \
                   radio_websocket.o \
@@ -111,7 +112,7 @@ tests/backend_selection_test: tests/backend_selection_test.c cfg_utils.c cfg_uti
                               hamlib/radio_hamlib.h radio.h \
                               tests/fixtures/backend-default.ini \
                               tests/fixtures/backend-zbitx.ini
-	$(CC) $(TEST_CFLAGS) tests/backend_selection_test.c -o $@ -liniparser -lpthread
+	$(CC) $(TEST_CFLAGS) tests/backend_selection_test.c hamlib/rig_server.c -o $@ -liniparser -lpthread
 
 tests/compat_surface_test: tests/compat_surface_test.c radio_shm.c radio_shm.h \
                            radio_pipeline.c radio_pipeline.h \

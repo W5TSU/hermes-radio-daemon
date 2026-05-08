@@ -259,6 +259,12 @@ bool init_config_radio(radio *radio_h, const char *ini_name)
     b = iniparser_getboolean(ini, "main:enable_websocket", 0);
     radio_h->enable_websocket = (bool) b;
 
+    /* rigctld server for hamlib-compatible remote control */
+    b = iniparser_getboolean(ini, "main:rig_server_enable", 0);
+    radio_h->rig_server_enable = (bool) b;
+    i = iniparser_getint(ini, "main:rig_server_port", 4532);
+    radio_h->rig_server_port = i;
+
     b = iniparser_getboolean(ini, "main:enable_audio_bridge", 0);
     radio_h->enable_audio_bridge = (bool) b;
 
