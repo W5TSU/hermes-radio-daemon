@@ -129,7 +129,10 @@ int sbitx_cw_encode(const char *message, float *signal, int max_n,
     char pattern[1024];
     lookup_morse(message, pattern, sizeof(pattern));
 
-    float dot_us = 60000000.0f / (float) wpm;
+    /* PARIS standard: 1 word = 50 dot units, so 1 dot = 1200 ms / WPM
+     * = 1_200_000 us / WPM. The previous constant 60_000_000 made one
+     * dot last 50× longer (3 s at 20 WPM). */
+    float dot_us = 1200000.0f / (float) wpm;
     float dash_us = dot_us * 3.0f;
     float ele_space_us = dot_us;
     float char_space_us = dot_us * 3.0f;

@@ -799,13 +799,19 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
     bool digital_voice = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].digital_voice;
     uint16_t tx_mode = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].mode;
 
-    // CW TX: DDS tone gated by Morse pattern
+    // CW TX: pop messages from the digi_tx queue, encode to a 96 kHz
+    // audio stream via sbitx_cw_encode (which already does the DDS at
+    // cw_pitch with raised-cosine envelope), and feed the FFT TX path.
+    // Emits silence when the queue is empty so PTT held with no
+    // pending text doesn't loop a stale message.
     if (tx_mode == MODE_CW)
     {
-        static bool cw_tx_inited = false;
-        static float cw_tx_buf[2048];
-        static int cw_tx_len = 0;
-        static int cw_tx_pos = 0;
+        static bool   cw_tx_inited = false;
+        /* 8 s of CW audio at 96 kHz; ample for short messages even at
+         * slow WPM. Long messages are encoded one chunk per pop. */
+        static float  cw_audio[96000 * 8];
+        static int    cw_audio_len = 0;
+        static int    cw_audio_pos = 0;
 
         if (!cw_tx_inited)
         {
@@ -813,28 +819,97 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
             cw_tx_inited = true;
         }
 
-        for (i = 0; i < block_size; i++)
-            tx_float_buf[i] = (float) signal_input_f[i];
-
-        tx_dc_state = dcblock_ff(tx_float_buf, tx_float_out, block_size, 0.999f, tx_dc_state);
-
-        static complexf cw_tx_iq[1024];
-        for (i = 0; i < block_size; i++)
+        if (cw_audio_pos >= cw_audio_len)
         {
-            static float cw_phase = 0.0f;
-            float dds_step = 2.0f * (float) M_PI * radio_h_dsp->cw_pitch / 96000.0f;
-            cw_phase += dds_step;
-            if (cw_phase > 2.0f * (float) M_PI) cw_phase -= 2.0f * (float) M_PI;
-            float tone = tx_float_out[i] * sinf(cw_phase);
-            cw_tx_iq[i].i = tone;
-            cw_tx_iq[i].q = 0.0f;
+            char text[DIGI_TX_MSG_MAX];
+            if (digi_tx_queue_pop(&radio_h_dsp->digi_tx, text, sizeof(text)))
+            {
+                cw_audio_len = sbitx_cw_encode(
+                    text, cw_audio,
+                    (int) (sizeof(cw_audio) / sizeof(cw_audio[0])),
+                    radio_h_dsp->cw_wpm, radio_h_dsp->cw_pitch);
+                cw_audio_pos = 0;
+
+                FILE *f = fopen("/var/spool/hermes-digi/spool.log", "a");
+                if (f) {
+                    uint32_t freq_khz = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].freq / 1000;
+                    fprintf(f, "CW tx %u.%03u: %s\n",
+                            freq_khz / 1000, freq_khz % 1000, text);
+                    fclose(f);
+                }
+            }
+            else
+            {
+                cw_audio_len = 0;  /* empty queue → silence */
+            }
         }
 
         for (i = MAX_BINS/2; i < MAX_BINS; i++)
         {
+            float tone = (cw_audio_pos < cw_audio_len)
+                         ? cw_audio[cw_audio_pos++] : 0.0f;
             int k = i - MAX_BINS/2;
-            fft_in[i] = (double) cw_tx_iq[k].i + I * (double) cw_tx_iq[k].q;
-            fft_m[k] = fft_in[i];
+            fft_in[i] = (double) tone;
+            fft_m[k]  = fft_in[i];
+        }
+    }
+    // FT8 TX: pop messages from the digi_tx queue, encode to 12 kHz
+    // GFSK audio via sbitx_ft8_encode, and stream-upsample 8× to
+    // 96 kHz with linear interpolation. FT8 transmissions are normally
+    // ~12.6 s of audio (79 tones × 0.16 s) so we stream rather than
+    // pre-expand to the full 96 kHz buffer.
+    else if (tx_mode == MODE_FT8)
+    {
+        /* 16 s of 12 kHz audio = 192 000 samples; comfortably more
+         * than one FT8 transmission. */
+        static float  ft8_audio_12k[192000];
+        static int    ft8_audio_12k_len = 0;
+        static double ft8_pos_12k       = 0.0;
+        static const double FT8_STEP_12K = 12000.0 / 96000.0; /* 0.125 */
+
+        if (ft8_pos_12k >= (double) ft8_audio_12k_len)
+        {
+            char text[DIGI_TX_MSG_MAX];
+            if (digi_tx_queue_pop(&radio_h_dsp->digi_tx, text, sizeof(text)))
+            {
+                /* Center FT8 GFSK tones around 1500 Hz inside the SSB
+                 * passband, matching the pattern the RX path expects. */
+                ft8_audio_12k_len = sbitx_ft8_encode(
+                    text, ft8_audio_12k,
+                    (int) (sizeof(ft8_audio_12k) / sizeof(ft8_audio_12k[0])),
+                    1500.0f);
+                if (ft8_audio_12k_len < 0) ft8_audio_12k_len = 0;
+                ft8_pos_12k = 0.0;
+
+                FILE *f = fopen("/var/spool/hermes-digi/spool.log", "a");
+                if (f) {
+                    uint32_t freq_khz = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].freq / 1000;
+                    fprintf(f, "FT8 tx %u.%03u: %s\n",
+                            freq_khz / 1000, freq_khz % 1000, text);
+                    fclose(f);
+                }
+            }
+            else
+            {
+                ft8_audio_12k_len = 0;  /* empty queue → silence */
+            }
+        }
+
+        for (i = MAX_BINS/2; i < MAX_BINS; i++)
+        {
+            float tone = 0.0f;
+            if (ft8_pos_12k < (double) (ft8_audio_12k_len - 1))
+            {
+                /* Linear interpolation 12 kHz → 96 kHz. */
+                int    idx  = (int) ft8_pos_12k;
+                double frac = ft8_pos_12k - idx;
+                tone = (float) (ft8_audio_12k[idx] * (1.0 - frac) +
+                                ft8_audio_12k[idx + 1] * frac);
+                ft8_pos_12k += FT8_STEP_12K;
+            }
+            int k = i - MAX_BINS/2;
+            fft_in[i] = (double) tone;
+            fft_m[k]  = fft_in[i];
         }
     }
     // RTTY TX: FSK modulator. Pulls one message at a time from the
