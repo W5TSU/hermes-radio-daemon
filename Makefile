@@ -114,10 +114,10 @@ tests/backend_selection_test: tests/backend_selection_test.c cfg_utils.c cfg_uti
 	$(CC) $(TEST_CFLAGS) tests/backend_selection_test.c -o $@ -liniparser -lpthread
 
 tests/compat_surface_test: tests/compat_surface_test.c radio_shm.c radio_shm.h \
-                           radio_websocket.c radio_websocket.h hamlib/radio_pipeline.c \
-                           hamlib/radio_pipeline.h radio_backend.h hamlib/radio_media.h radio.h \
+                           hamlib/radio_pipeline.c hamlib/radio_pipeline.h \
+                           radio_backend.h radio.h \
                            shm_utils.h include/sbitx_io.h include/radio_cmds.h
-	$(CC) $(TEST_CFLAGS) tests/compat_surface_test.c -o $@ -lcrypto -lpthread
+	$(CC) $(TEST_CFLAGS) tests/compat_surface_test.c -o $@ -lpthread
 
 # ── install ─────────────────────────────────────────────────────
 prefix     ?= /usr
