@@ -517,6 +517,37 @@ Set `hw_profile = zbitx` in `core.ini` to enable zBitx-specific GPIO handling:
 - Different BFO frequency: 40048000 Hz (vs 40035000 for sbitx)
 - Modified TX/RX switching sequence (RX line polarity before TX line)
 
+## Rigctld-Compatible Server
+
+The daemon can emulate a hamlib rig on port 4532, allowing external applications (fldigi, WSJT-X, QLog, etc.) to control the sBitx/zBitx as if it were a hamlib-compatible radio. Enabled for the `hfsignals` backend only — hamlib radios already have native rigctld support.
+
+Enable in `core.ini`:
+```ini
+rig_server_enable = 1
+rig_server_port  = 4532
+```
+
+Clients connect to `localhost:4532` (or `<sbitx-ip>:4532`) and use standard hamlib model 2 (NET rigctl). Supported commands:
+
+| Rigctl | Action |
+|--------|--------|
+| `f` / `F <Hz>` | Get/set frequency |
+| `m` / `M <mode>` | Get/set mode (LSB, USB, CW, FM, AM, RTTY) |
+| `t` / `T 0/1` | Get/set PTT state |
+| `v` / `V` | Get VFO |
+| `\chk_vfo` | VFO capability check |
+| `\dump_state` | Full rig capabilities |
+| `l STRENGTH` | Signal strength (forward power) |
+| `l SQL` | Squelch level |
+| `q` | Disconnect |
+
+Example using `rigctl`:
+```bash
+rigctl -m 2 -r localhost:4532 f    # get frequency
+rigctl -m 2 -r localhost:4532 F 7100000  # set to 7.1 MHz
+rigctl -m 2 -r localhost:4532 T 1  # PTT on
+```
+
 ## License
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
