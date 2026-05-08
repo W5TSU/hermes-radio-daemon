@@ -183,11 +183,11 @@ void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
 
     char tmp[64];
     sprintf(tmp, "%u", radio_h->reflected_threshold);
-    int rc = cfg_set(radio_h, radio_h->cfg_core, "main:reflected_threshold", tmp);
+    int rc = cfg_set(radio_h, radio_h->cfg_radio, "main:reflected_threshold", tmp);
     if (rc != 0)
         printf("Error modifying config file\n");
 
-    radio_h->cfg_core_dirty = true;
+    radio_h->cfg_radio_dirty = true;
 }
 
 void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
@@ -316,11 +316,11 @@ void set_serial(radio *radio_h, uint32_t serial)
 
     char tmp[64];
     sprintf(tmp, "%u", radio_h->serial_number);
-    int rc = cfg_set(radio_h, radio_h->cfg_core, "main:serial_number", tmp);
+    int rc = cfg_set(radio_h, radio_h->cfg_radio, "main:serial_number", tmp);
     if (rc != 0)
         printf("Error modifying config file\n");
 
-    radio_h->cfg_core_dirty = true;
+    radio_h->cfg_radio_dirty = true;
 }
 
 void set_profile_timeout(radio *radio_h, int32_t timeout)
@@ -409,11 +409,11 @@ void set_bfo(radio *radio_h, uint32_t frequency)
 
     char tmp[64];
     sprintf(tmp, "%u", radio_h->bfo_frequency);
-    int rc = cfg_set(radio_h, radio_h->cfg_core, "main:bfo", tmp);
+    int rc = cfg_set(radio_h, radio_h->cfg_radio, "main:bfo", tmp);
     if (rc != 0)
         printf("Error modifying config file\n");
 
-    radio_h->cfg_core_dirty = true;
+    radio_h->cfg_radio_dirty = true;
 }
 
 

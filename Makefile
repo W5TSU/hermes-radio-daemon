@@ -126,7 +126,6 @@ SBITX_SRCS = sbitx/sbitx_controller.c \
              dsp/sbitx_rtty.c \
              sbitx/sbitx_shm.c \
              sbitx/sbitx_si5351.c \
-             sbitx/sbitx_websocket.c \
              sbitx/cfg_utils.c \
              sbitx/mongoose.c \
              sbitx/ring_buffer.c \

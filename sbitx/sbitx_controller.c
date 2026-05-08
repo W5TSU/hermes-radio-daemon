@@ -32,7 +32,6 @@
 #include "sbitx_alsa.h"
 #include "sbitx_shm.h"
 #include "sbitx_core.h"
-#include "sbitx_websocket.h"
 #include "sbitx_dsp.h"
 #include "cfg_utils.h"
 
@@ -53,7 +52,6 @@ int main(int argc, char* argv[])
     radio radio_h; // radio handler
     pthread_t cfg_tid; // configuration subsystem thread id
     pthread_t hw_tids[2]; // 2 hw thread ids user for IO
-    pthread_t web_tid; // websocket thread id
     pthread_t shm_tid; // shared memory interface thread id
     pthread_t control_tid, radio_capture, radio_playback, loop_capture, loop_playback; // audio threads
 
@@ -111,8 +109,9 @@ int main(int argc, char* argv[])
 
     hw_init(&radio_h, hw_tids);
 
-   if (radio_h.enable_websocket)
-       websocket_init(&radio_h, cfg_runtime_web_path(), &web_tid);
+   /* Websocket is now served by the unified daemon-side radio_websocket.c
+    * (mongoose-based, ws:// + wss://). The embedded sBitx no longer runs
+    * its own websocket server. */
 
    if (radio_h.enable_shm_control)
        shm_controller_init(&radio_h, &shm_tid);
@@ -123,9 +122,6 @@ int main(int argc, char* argv[])
    // the next call calls pthread_join(), so it blocks until shutdown == true
    hw_shutdown(&radio_h, hw_tids);
    cfg_shutdown(&radio_h, &cfg_tid);
-
-   if (radio_h.enable_websocket)
-       websocket_shutdown(&web_tid);
 
    if (radio_h.enable_shm_control)
        shm_controller_shutdown(&shm_tid);

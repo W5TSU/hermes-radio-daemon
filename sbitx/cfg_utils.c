@@ -37,7 +37,7 @@ extern _Atomic bool shutdown_;
 
 #define RUNTIME_PATH_MAX 512
 
-static char runtime_cfg_core_path[RUNTIME_PATH_MAX] = CFG_CORE_PATH;
+static char runtime_cfg_core_path[RUNTIME_PATH_MAX] = CFG_RADIO_PATH;
 static char runtime_cfg_user_path[RUNTIME_PATH_MAX] = CFG_USER_PATH;
 static char runtime_cfg_web_path[RUNTIME_PATH_MAX] = CFG_WEBSOCKET_PATH;
 
@@ -56,7 +56,7 @@ void cfg_set_runtime_paths(const char *cfg_core, const char *cfg_user,
     cfg_assign_runtime_path(runtime_cfg_core_path,
                             sizeof(runtime_cfg_core_path),
                             cfg_core,
-                            CFG_CORE_PATH);
+                            CFG_RADIO_PATH);
     cfg_assign_runtime_path(runtime_cfg_user_path,
                             sizeof(runtime_cfg_user_path),
                             cfg_user,
@@ -90,7 +90,7 @@ bool cfg_init(radio *radio_h, const char *cfg_core, const char *cfg_user, pthrea
     init_config_core(radio_h, cfg_core);
     init_config_user(radio_h, cfg_user);
 
-    radio_h->cfg_core_dirty = false;
+    radio_h->cfg_radio_dirty = false;
     radio_h->cfg_user_dirty = false;
 
     // start config file writer thread
@@ -127,10 +127,10 @@ void *config_thread(void *radio_h_v)
 
     while (!shutdown_)
     {
-        if (radio_h->cfg_core_dirty)
+        if (radio_h->cfg_radio_dirty)
         {
             write_config_core(radio_h, cfg_runtime_core_path());
-            radio_h->cfg_core_dirty = false;
+            radio_h->cfg_radio_dirty = false;
         }
 
         if (radio_h->cfg_user_dirty)
@@ -169,7 +169,7 @@ bool init_config_core(radio *radio_h, const char *ini_name)
     double          d ;
     const char  *   s ;
 
-    radio_h->cfg_core = NULL;
+    radio_h->cfg_radio = NULL;
     ini = iniparser_load(ini_name);
 
     if (ini==NULL) {
@@ -177,7 +177,7 @@ bool init_config_core(radio *radio_h, const char *ini_name)
         return false;
     }
 
-    radio_h->cfg_core = ini;
+    radio_h->cfg_radio = ini;
 
     i = iniparser_getint(ini, "main:bfo", 40035000);
     // printf("BFO:      [%d]\n", i);
@@ -464,7 +464,7 @@ bool write_config_core(radio *radio_h, const char *ini_name)
     stream = open_memstream (&bp, &size);
 
     pthread_mutex_lock(&radio_h->cfg_mutex);
-    iniparser_dump_ini(radio_h->cfg_core, stream);
+    iniparser_dump_ini(radio_h->cfg_radio, stream);
     pthread_mutex_unlock(&radio_h->cfg_mutex);
 
     fclose(stream);
@@ -512,7 +512,7 @@ int cfg_set(radio *radio_h, dictionary * ini, const char * entry, const char * v
 
 bool close_config_core(radio *radio_h)
 {
-    iniparser_freedict(radio_h->cfg_core);
+    iniparser_freedict(radio_h->cfg_radio);
 
     return true;
 }
