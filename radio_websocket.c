@@ -599,16 +599,25 @@ static void fn(struct mg_connection *c, int ev, void *ev_data)
 
     if (ev == MG_EV_ACCEPT)
     {
-        /* TLS only when the listener is wss://. The unconditional
-         * mg_tls_init() that used to live in sbitx_websocket.c caused
-         * mongoose to drop every plaintext connection. */
+        /* TLS only when the listener is wss://. Mongoose 7.20+ expects
+         * the cert/key PEM bytes in opts.cert/opts.key, NOT file paths,
+         * so we load them off disk on each connection. (Cached at the
+         * mgr level would be nicer but mg_tls_init copies what it needs
+         * and mg_file_read mallocs new buffers we can free immediately.) */
         if (strncmp(ctx->radio_h->websocket_url, "wss://", 6) == 0)
         {
-            struct mg_tls_opts opts = {
-                .cert    = mg_str(CFG_SSL_CERT),
-                .key     = mg_str(CFG_SSL_KEY),
-            };
+            struct mg_str cert = mg_file_read(&mg_fs_posix, CFG_SSL_CERT);
+            struct mg_str key  = mg_file_read(&mg_fs_posix, CFG_SSL_KEY);
+            if (cert.buf == NULL || key.buf == NULL)
+            {
+                fprintf(stderr,
+                        "radio_websocket: failed to load %s / %s — wss handshake will fail\n",
+                        CFG_SSL_CERT, CFG_SSL_KEY);
+            }
+            struct mg_tls_opts opts = { .cert = cert, .key = key };
             mg_tls_init(c, &opts);
+            free((void *) cert.buf);
+            free((void *) key.buf);
         }
     }
     else if (ev == MG_EV_HTTP_MSG)
