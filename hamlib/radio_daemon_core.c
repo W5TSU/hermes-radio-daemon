@@ -25,22 +25,40 @@
 
 extern _Atomic bool shutdown_;
 
+/* Async-signal-safe handler. POSIX guarantees only a small set of
+ * functions are safe to call from a signal handler — printf, sleep,
+ * exit, and most stdio are NOT on that list. The previous handler
+ * called all three and forcibly exited after 5s, dropping any unflushed
+ * config writes. The new handler just sets the atomic flag and writes
+ * a short status line via write(2); the main thread observes the flag
+ * and runs orderly teardown (config flush + thread joins). */
 static void exit_radio(int sig)
 {
+    static const char msg[] = "radio_daemon: caught signal, shutting down\n";
     (void) sig;
-    printf("Caught signal – shutting down...\n");
     shutdown_ = true;
-
-    sleep(5);
-    exit(EXIT_FAILURE);
+    /* write(2) is async-signal-safe; ignore short writes. */
+    ssize_t r = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    (void) r;
 }
 
 static void install_signal_handlers(void)
 {
-    signal(SIGINT, exit_radio);
-    signal(SIGQUIT, exit_radio);
-    signal(SIGTERM, exit_radio);
-    signal(SIGPIPE, SIG_IGN);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = exit_radio;
+    sigemptyset(&sa.sa_mask);
+    /* Don't restart syscalls; we want blocking reads/poll to return
+     * EINTR so the worker threads can observe shutdown_ promptly. */
+    sa.sa_flags = 0;
+    sigaction(SIGINT,  &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+
+    struct sigaction ign;
+    memset(&ign, 0, sizeof(ign));
+    ign.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &ign, NULL);
 }
 
 static void maybe_pin_cpu(int cpu_nr)
