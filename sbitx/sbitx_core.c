@@ -876,5 +876,6 @@ const radio_backend_ops sbitx_backend_ops = {
     .set_tone_generation     = sbitx_set_tone_generation,
     .set_profile             = set_profile,
     .get_fwd_power           = get_fwd_power,
+    .get_ref_power           = get_ref_power,
     .get_swr                 = get_swr,
 };

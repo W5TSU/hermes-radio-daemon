@@ -624,6 +624,14 @@ static uint32_t get_fwd_power(radio *radio_h)
     return radio_h->fwd_power;
 }
 
+static uint32_t get_ref_power(radio *radio_h)
+{
+    if (!radio_h || !radio_h->rig)
+        return 0;
+    hamlib_update_measurements(radio_h);
+    return radio_h->ref_power;
+}
+
 static uint32_t get_swr(radio *radio_h)
 {
     if (!radio_h->rig)
@@ -794,5 +802,6 @@ const radio_backend_ops hamlib_backend_ops = {
     .set_tone_generation     = set_tone_generation,
     .set_profile             = set_profile,
     .get_fwd_power           = get_fwd_power,
+    .get_ref_power           = get_ref_power,
     .get_swr                 = get_swr,
 };

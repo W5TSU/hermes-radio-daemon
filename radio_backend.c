@@ -12,6 +12,7 @@
 #include "cfg_utils.h"
 #include "radio_backend.h"
 #include "radio_daemon_core.h"
+#include "rig_server.h"
 
 /* Timer reset flag — defined by hamlib/radio_hamlib.c (used only by hamlib's
  * profile-timeout io thread; harmless when hfsignals backend is selected). */
@@ -78,11 +79,14 @@ int radio_backend_run(const radio_backend_selection *selection,
 bool radio_backend_init(radio *radio_h)
 {
     const radio_backend_ops *ops = radio_backend_ops_from_radio(radio_h);
-    return ops && ops->init ? ops->init(radio_h) : false;
+    bool ok = ops && ops->init ? ops->init(radio_h) : false;
+    rig_server_start(radio_h);
+    return ok;
 }
 
 void radio_backend_shutdown(radio *radio_h)
 {
+    rig_server_stop();
     const radio_backend_ops *ops = radio_backend_ops_from_radio(radio_h);
     if (ops && ops->shutdown)
         ops->shutdown(radio_h);
@@ -197,6 +201,15 @@ uint32_t radio_backend_get_fwd_power(radio *radio_h)
         return ops->get_fwd_power(radio_h);
 
     return radio_h ? radio_h->fwd_power : 0;
+}
+
+uint32_t radio_backend_get_ref_power(radio *radio_h)
+{
+    const radio_backend_ops *ops = radio_backend_ops_from_radio(radio_h);
+    if (ops && ops->get_ref_power)
+        return ops->get_ref_power(radio_h);
+
+    return radio_h ? radio_h->ref_power : 0;
 }
 
 uint32_t radio_backend_get_swr(radio *radio_h)

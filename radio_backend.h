@@ -40,6 +40,7 @@ typedef struct radio_backend_ops {
     void (*set_tone_generation)(radio *radio_h, bool tone_generation);
     void (*set_profile)(radio *radio_h, uint32_t profile);
     uint32_t (*get_fwd_power)(radio *radio_h);
+    uint32_t (*get_ref_power)(radio *radio_h);
     uint32_t (*get_swr)(radio *radio_h);
 } radio_backend_ops;
 
@@ -71,6 +72,7 @@ void radio_backend_set_step_size(radio *radio_h, uint32_t step_size);
 void radio_backend_set_tone_generation(radio *radio_h, bool tone_generation);
 void radio_backend_set_profile(radio *radio_h, uint32_t profile);
 uint32_t radio_backend_get_fwd_power(radio *radio_h);
+uint32_t radio_backend_get_ref_power(radio *radio_h);
 uint32_t radio_backend_get_swr(radio *radio_h);
 void radio_backend_reset_timeout_timer(void);
 
