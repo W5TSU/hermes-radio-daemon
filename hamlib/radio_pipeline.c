@@ -51,7 +51,13 @@ static const radio_pipeline_descriptor pipeline_registry[] = {
         .domain = RADIO_PIPELINE_DOMAIN_ANALOG,
         .media_owner = RADIO_PIPELINE_MEDIA_LEGACY,
         .runtime_kind = RADIO_PIPELINE_RUNTIME_BACKEND_EMBEDDED,
-        .capabilities = RADIO_PIPELINE_CAP_EMBEDDED_DSP,
+        .capabilities = RADIO_PIPELINE_CAP_EMBEDDED_DSP |
+                        RADIO_PIPELINE_CAP_WS_RX_AUDIO |
+                        RADIO_PIPELINE_CAP_WS_TX_AUDIO |
+                        RADIO_PIPELINE_CAP_RX_SPECTRUM |
+                        RADIO_PIPELINE_CAP_TX_SPECTRUM |
+                        RADIO_PIPELINE_CAP_RX_RECORDING |
+                        RADIO_PIPELINE_CAP_TX_RECORDING,
     },
     {
         .name = "hfsignals-radev2",
@@ -60,7 +66,14 @@ static const radio_pipeline_descriptor pipeline_registry[] = {
         .domain = RADIO_PIPELINE_DOMAIN_RADEV2,
         .media_owner = RADIO_PIPELINE_MEDIA_LEGACY,
         .runtime_kind = RADIO_PIPELINE_RUNTIME_BACKEND_EMBEDDED,
-        .capabilities = RADIO_PIPELINE_CAP_EMBEDDED_DSP,
+        .capabilities = RADIO_PIPELINE_CAP_EMBEDDED_DSP |
+                        RADIO_PIPELINE_CAP_WS_RX_AUDIO |
+                        RADIO_PIPELINE_CAP_WS_TX_AUDIO |
+                        RADIO_PIPELINE_CAP_RX_SPECTRUM |
+                        RADIO_PIPELINE_CAP_TX_SPECTRUM |
+                        RADIO_PIPELINE_CAP_RX_RECORDING |
+                        RADIO_PIPELINE_CAP_TX_RECORDING |
+                        RADIO_PIPELINE_CAP_EXTERNAL_MODEM,
     },
 };
 

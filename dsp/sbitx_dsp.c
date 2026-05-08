@@ -837,35 +837,62 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
             fft_m[k] = fft_in[i];
         }
     }
-    // RTTY TX: FSK modulator
+    // RTTY TX: FSK modulator. Pulls one message at a time from the
+    // websocket digi_tx_queue (filled by `digi_send`); emits silence
+    // when the queue is empty so PTT held with no pending text doesn't
+    // loop a stale message.
     else if (tx_mode == MODE_RTTY)
     {
-        static bool rtty_inited = false;
-        static float rtty_audio[2048];
-        static int rtty_audio_len = 0;
-        static int rtty_audio_pos = 0;
+        static bool  rtty_inited      = false;
+        static float rtty_audio[8192];
+        static int   rtty_audio_len   = 0;
+        static int   rtty_audio_pos   = 0;
 
         if (!rtty_inited)
         {
             sbitx_rtty_init(radio_h_dsp->rtty_baud, radio_h_dsp->rtty_mark,
                             radio_h_dsp->rtty_shift);
-            rtty_audio_len = sbitx_rtty_encode("  CQ CQ DE HERMES  ", rtty_audio, 2048,
-                                                radio_h_dsp->rtty_baud,
-                                                radio_h_dsp->rtty_mark,
-                                                radio_h_dsp->rtty_shift);
             rtty_inited = true;
         }
 
+        /* When the previous message has been fully clocked out, see if
+         * there's another one waiting. If not, emit silence. */
         if (rtty_audio_pos >= rtty_audio_len)
-            rtty_audio_pos = 0;
+        {
+            char text[DIGI_TX_MSG_MAX];
+            if (digi_tx_queue_pop(&radio_h_dsp->digi_tx, text, sizeof(text)))
+            {
+                rtty_audio_len = sbitx_rtty_encode(
+                    text, rtty_audio,
+                    (int) (sizeof(rtty_audio) / sizeof(rtty_audio[0])),
+                    radio_h_dsp->rtty_baud,
+                    radio_h_dsp->rtty_mark,
+                    radio_h_dsp->rtty_shift);
+                rtty_audio_pos = 0;
+
+                /* Also log the outbound message into the digi spool so
+                 * `digi_messages` shows what we transmitted. */
+                FILE *f = fopen("/var/spool/hermes-digi/spool.log", "a");
+                if (f) {
+                    uint32_t freq_khz = radio_h_dsp->profiles[radio_h_dsp->profile_active_idx].freq / 1000;
+                    fprintf(f, "RTTY tx %u.%03u: %s\n",
+                            freq_khz / 1000, freq_khz % 1000, text);
+                    fclose(f);
+                }
+            }
+            else
+            {
+                rtty_audio_len = 0;  /* empty queue → silence */
+            }
+        }
 
         for (i = MAX_BINS/2; i < MAX_BINS; i++)
         {
+            float tone = (rtty_audio_pos < rtty_audio_len)
+                         ? rtty_audio[rtty_audio_pos++] : 0.0f;
             int k = i - MAX_BINS/2;
-            float tone = rtty_audio[rtty_audio_pos++];
-            if (rtty_audio_pos >= rtty_audio_len) rtty_audio_pos = 0;
             fft_in[i] = (double) tone;
-            fft_m[k] = fft_in[i];
+            fft_m[k]  = fft_in[i];
         }
     }
     // FM TX: pre-emphasis + fmmod

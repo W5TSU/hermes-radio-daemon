@@ -605,6 +605,29 @@ size_t radio_media_pop_rx_audio(radio *radio_h, int16_t *samples, size_t max_sam
     return ring_pop(&radio_h->rx_audio_ring, samples, max_samples);
 }
 
+/* Embedded-side audio taps. The sbitx ALSA path already writes RX into
+ * radio_h->rx_audio_ring via sbitx_bridge_push_rx (and reads TX via
+ * sbitx_bridge_pop_tx); these helpers just add the recording write +
+ * spectrum compute on top of that flow. The wav_recording mutex makes
+ * recording_write zero-overhead when no recording is active. */
+void radio_media_tap_rx_audio(radio *radio_h, const int16_t *samples, size_t nsamples)
+{
+    if (radio_h->rx_recording.active)
+        recording_write(&radio_h->rx_recording, samples, nsamples);
+    if (nsamples >= SPECTRUM_FFT_SIZE &&
+        radio_pipeline_supports_spectrum(radio_h, false))
+        compute_spectrum(radio_h, false, samples, nsamples);
+}
+
+void radio_media_tap_tx_audio(radio *radio_h, const int16_t *samples, size_t nsamples)
+{
+    if (radio_h->tx_recording.active)
+        recording_write(&radio_h->tx_recording, samples, nsamples);
+    if (nsamples >= SPECTRUM_FFT_SIZE &&
+        radio_pipeline_supports_spectrum(radio_h, true))
+        compute_spectrum(radio_h, true, samples, nsamples);
+}
+
 static bool stream_matches(const char *stream_name, const char *candidate)
 {
     return stream_name && !strcmp(stream_name, candidate);

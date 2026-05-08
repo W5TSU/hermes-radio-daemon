@@ -33,6 +33,7 @@
 #include "sbitx_alsa.h"
 #include "sbitx_dsp.h"
 #include "sbitx_buffer.h"
+#include "../hamlib/radio_media.h"
 
 char *radio_capture_dev = "hw:0,0";
 char *radio_playback_dev = "hw:0,0";
@@ -1075,6 +1076,10 @@ void *control_thread(void *device_ptr)
                 for (uint32_t k = 0; k < block_size; k++)
                     bridge_rx_buf[k] = (int16_t) (spk[k] >> 16);
                 sbitx_bridge_push_rx(radio_h_snd, bridge_rx_buf, block_size);
+                /* Recording + spectrum tap. radio_media_tap_rx_audio is a
+                 * no-op when nothing is being recorded and the spectrum
+                 * compute is gated by pipeline caps. */
+                radio_media_tap_rx_audio(radio_h_snd, bridge_rx_buf, block_size);
             }
         }
         else
@@ -1083,6 +1088,8 @@ void *control_thread(void *device_ptr)
             {
                 static int16_t bridge_tx_buf[1024];
                 size_t got = sbitx_bridge_pop_tx(radio_h_snd, bridge_tx_buf, block_size);
+                if (got > 0)
+                    radio_media_tap_tx_audio(radio_h_snd, bridge_tx_buf, got);
                 if (got > 0)
                 {
                     static uint8_t tx_bridge_buf_raw[4096];

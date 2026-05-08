@@ -30,6 +30,13 @@ void radio_media_shutdown(radio *radio_h, pthread_t *capture_tid, pthread_t *pla
 void radio_media_push_tx_audio(radio *radio_h, const int16_t *samples, size_t nsamples);
 size_t radio_media_pop_rx_audio(radio *radio_h, int16_t *samples, size_t max_samples);
 
+/* Hook for the embedded sBitx audio path: tap RX/TX samples into the
+ * WAV recordings (radio_h->rx_recording / tx_recording). Zero-cost when
+ * `recording.active == false`. Also computes the spectrum so the
+ * waterfall has data on hfsignals. */
+void radio_media_tap_rx_audio(radio *radio_h, const int16_t *samples, size_t nsamples);
+void radio_media_tap_tx_audio(radio *radio_h, const int16_t *samples, size_t nsamples);
+
 bool radio_media_start_recording(radio *radio_h, const char *stream_name);
 bool radio_media_stop_recording(radio *radio_h, const char *stream_name);
 
