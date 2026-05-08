@@ -74,7 +74,7 @@ make
 sudo make install
 ```
 
-Installs to `/usr/bin/` and `/etc/sbitx/` (configs are only placed if they do not already exist):
+Installs to `/usr/bin/` and `/etc/hermes/` (configs are only placed if they do not already exist):
 
 - `/usr/bin/radio_daemon`
 - `/usr/bin/radio_client`
@@ -84,7 +84,7 @@ Installs to `/usr/bin/` and `/etc/sbitx/` (configs are only placed if they do no
 
 ## Configuration
 
-All configuration lives in two files under `/etc/sbitx/`.
+All configuration lives in two files under `/etc/hermes/`.
 
 ### `/etc/hermes/core.ini` — radio hardware
 

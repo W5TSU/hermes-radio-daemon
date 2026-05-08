@@ -46,7 +46,7 @@ static const radio_pipeline_descriptor pipeline_registry[] = {
     },
     {
         .name = "hfsignals-analog",
-        .summary = "Embedded legacy_sbitx analog DSP and ALSA path",
+        .summary = "Embedded sbitx analog DSP and ALSA path",
         .backend_kind = RADIO_BACKEND_HFSIGNALS,
         .domain = RADIO_PIPELINE_DOMAIN_ANALOG,
         .media_owner = RADIO_PIPELINE_MEDIA_LEGACY,
@@ -61,7 +61,7 @@ static const radio_pipeline_descriptor pipeline_registry[] = {
     },
     {
         .name = "hfsignals-radev2",
-        .summary = "Embedded legacy_sbitx RADEv2 DSP and ALSA path",
+        .summary = "Embedded sbitx RADEv2 DSP and ALSA path",
         .backend_kind = RADIO_BACKEND_HFSIGNALS,
         .domain = RADIO_PIPELINE_DOMAIN_RADEV2,
         .media_owner = RADIO_PIPELINE_MEDIA_LEGACY,

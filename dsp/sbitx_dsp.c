@@ -854,32 +854,80 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
         }
     }
     // FT8 TX: pop messages from the digi_tx queue, encode to 12 kHz
-    // GFSK audio via sbitx_ft8_encode, and stream-upsample 8× to
-    // 96 kHz with linear interpolation. FT8 transmissions are normally
-    // ~12.6 s of audio (79 tones × 0.16 s) so we stream rather than
-    // pre-expand to the full 96 kHz buffer.
+    // GFSK audio via sbitx_ft8_encode, then upsample 8× to 96 kHz once
+    // at message-pop time using a short anti-aliasing FIR. The DSP
+    // loop just reads from the pre-expanded buffer like CW and RTTY
+    // do — no per-sample interpolation in the hot path.
     else if (tx_mode == MODE_FT8)
     {
-        /* 16 s of 12 kHz audio = 192 000 samples; comfortably more
-         * than one FT8 transmission. */
-        static float  ft8_audio_12k[192000];
-        static int    ft8_audio_12k_len = 0;
-        static double ft8_pos_12k       = 0.0;
-        static const double FT8_STEP_12K = 12000.0 / 96000.0; /* 0.125 */
+        /* 16 s @ 12 kHz scratch buffer for the encoder, then 16 s @
+         * 96 kHz for the upsampled signal that the DSP loop drains. */
+        static float ft8_audio_12k[192000];
+        static float ft8_audio_96k[192000 * 8];
+        static int   ft8_audio_96k_len = 0;
+        static int   ft8_audio_96k_pos = 0;
 
-        if (ft8_pos_12k >= (double) ft8_audio_12k_len)
+        if (ft8_audio_96k_pos >= ft8_audio_96k_len)
         {
             char text[DIGI_TX_MSG_MAX];
             if (digi_tx_queue_pop(&radio_h_dsp->digi_tx, text, sizeof(text)))
             {
                 /* Center FT8 GFSK tones around 1500 Hz inside the SSB
                  * passband, matching the pattern the RX path expects. */
-                ft8_audio_12k_len = sbitx_ft8_encode(
+                int n12 = sbitx_ft8_encode(
                     text, ft8_audio_12k,
                     (int) (sizeof(ft8_audio_12k) / sizeof(ft8_audio_12k[0])),
                     1500.0f);
-                if (ft8_audio_12k_len < 0) ft8_audio_12k_len = 0;
-                ft8_pos_12k = 0.0;
+                if (n12 < 0) n12 = 0;
+
+                /* 8× upsample: zero-stuff then convolve with a small
+                 * sinc-windowed lowpass at fc ≈ 5 kHz (well above the
+                 * 1500 Hz FT8 carrier, well below the SSB filter edge).
+                 * 33-tap symmetric FIR; centre tap is t=0. */
+                static const int  NTAPS = 33;
+                static const int  HALF  = 16;       /* (NTAPS - 1) / 2 */
+                static float taps[33];
+                static bool taps_inited = false;
+                if (!taps_inited) {
+                    /* Windowed sinc: hann × sinc(2*fc/fs * n) where
+                     * fc = 5 kHz, fs = 96 kHz. */
+                    double sum = 0.0;
+                    for (int t = 0; t < NTAPS; t++) {
+                        int n = t - HALF;
+                        double x = (n == 0) ? 1.0
+                                            : sin(2.0 * M_PI * 5000.0 / 96000.0 * n) /
+                                              (M_PI * n);
+                        double w = 0.5 - 0.5 * cos(2.0 * M_PI * t / (NTAPS - 1));
+                        taps[t] = (float) (x * w);
+                        sum += taps[t];
+                    }
+                    /* DC gain → 1 (insertion loss compensated). */
+                    for (int t = 0; t < NTAPS; t++) taps[t] /= (float) sum;
+                    taps_inited = true;
+                }
+
+                int n96 = n12 * 8;
+                if (n96 > (int) (sizeof(ft8_audio_96k) / sizeof(ft8_audio_96k[0])))
+                    n96 = (int) (sizeof(ft8_audio_96k) / sizeof(ft8_audio_96k[0]));
+
+                memset(ft8_audio_96k, 0, sizeof(float) * n96);
+                /* Place 12 kHz samples at every 8th 96 kHz position,
+                 * then convolve with the AA FIR. */
+                for (int j = 0; j < n96; j++) {
+                    if ((j % 8) != 0) continue;
+                    float s = ft8_audio_12k[j / 8];
+                    for (int t = 0; t < NTAPS; t++) {
+                        int idx = j + t - HALF;
+                        if (idx >= 0 && idx < n96)
+                            ft8_audio_96k[idx] += s * taps[t];
+                    }
+                }
+                /* Compensate for the 1/8 zero-stuffing energy loss. */
+                for (int j = 0; j < n96; j++)
+                    ft8_audio_96k[j] *= 8.0f;
+
+                ft8_audio_96k_len = n96;
+                ft8_audio_96k_pos = 0;
 
                 FILE *f = fopen("/var/spool/hermes-digi/spool.log", "a");
                 if (f) {
@@ -891,22 +939,14 @@ void dsp_process_tx(uint8_t *signal_input, uint8_t *output_speaker, uint8_t *out
             }
             else
             {
-                ft8_audio_12k_len = 0;  /* empty queue → silence */
+                ft8_audio_96k_len = 0;  /* empty queue → silence */
             }
         }
 
         for (i = MAX_BINS/2; i < MAX_BINS; i++)
         {
-            float tone = 0.0f;
-            if (ft8_pos_12k < (double) (ft8_audio_12k_len - 1))
-            {
-                /* Linear interpolation 12 kHz → 96 kHz. */
-                int    idx  = (int) ft8_pos_12k;
-                double frac = ft8_pos_12k - idx;
-                tone = (float) (ft8_audio_12k[idx] * (1.0 - frac) +
-                                ft8_audio_12k[idx + 1] * frac);
-                ft8_pos_12k += FT8_STEP_12K;
-            }
+            float tone = (ft8_audio_96k_pos < ft8_audio_96k_len)
+                         ? ft8_audio_96k[ft8_audio_96k_pos++] : 0.0f;
             int k = i - MAX_BINS/2;
             fft_in[i] = (double) tone;
             fft_m[k]  = fft_in[i];

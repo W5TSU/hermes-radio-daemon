@@ -11,7 +11,7 @@
 
 #include "cfg_utils.h"
 #include "radio_backend.h"
-#include "hamlib/radio_daemon_core.h"
+#include "radio_daemon_core.h"
 
 /* Timer reset flag — defined by hamlib/radio_hamlib.c (used only by hamlib's
  * profile-timeout io thread; harmless when hfsignals backend is selected). */

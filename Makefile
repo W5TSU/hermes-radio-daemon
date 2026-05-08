@@ -45,10 +45,10 @@ TEST_BINS = tests/backend_selection_test tests/compat_surface_test
 # ── daemon-level objects ────────────────────────────────────────
 DAEMON_TOP_OBJS = radio_daemon.o \
                   radio_backend.o \
-                  hamlib/radio_daemon_core.o \
-                  hamlib/radio_pipeline.o \
+                  radio_daemon_core.o \
+                  radio_pipeline.o \
                   hamlib/radio_hamlib.o \
-                  hamlib/radio_media.o \
+                  radio_media.o \
                   radio_shm.o \
                   radio_websocket.o \
                   cfg_utils.o \
@@ -107,14 +107,14 @@ compat-tests: $(TEST_BINS)
 	./tests/compat_surface_test
 
 tests/backend_selection_test: tests/backend_selection_test.c cfg_utils.c cfg_utils.h \
-                              radio_backend.c radio_backend.h hamlib/radio_daemon_core.h \
+                              radio_backend.c radio_backend.h radio_daemon_core.h \
                               hamlib/radio_hamlib.h radio.h \
                               tests/fixtures/backend-default.ini \
                               tests/fixtures/backend-zbitx.ini
 	$(CC) $(TEST_CFLAGS) tests/backend_selection_test.c -o $@ -liniparser -lpthread
 
 tests/compat_surface_test: tests/compat_surface_test.c radio_shm.c radio_shm.h \
-                           hamlib/radio_pipeline.c hamlib/radio_pipeline.h \
+                           radio_pipeline.c radio_pipeline.h \
                            radio_backend.h radio.h \
                            shm_utils.h include/sbitx_io.h include/radio_cmds.h
 	$(CC) $(TEST_CFLAGS) tests/compat_surface_test.c -o $@ -lpthread

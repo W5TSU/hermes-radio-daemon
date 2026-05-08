@@ -112,7 +112,6 @@
 #define MAX_CAL_BANDS      16
 
 #define AUDIO_DEVICE_NAME_MAX 256
-#define WEBSOCKET_BIND_MAX    128
 #define WEBSOCKET_URL_MAX     256
 #define RECORDING_PATH_MAX    512
 #define WATERFALL_BINS        128
@@ -302,7 +301,6 @@ typedef struct {
     _Atomic bool enable_websocket;
     _Atomic bool enable_audio_bridge;
 
-    char websocket_bind[WEBSOCKET_BIND_MAX]; /* legacy host:port */
     char websocket_url[WEBSOCKET_URL_MAX];   /* full ws:// or wss:// URL */
 
     char capture_device[AUDIO_DEVICE_NAME_MAX];

@@ -259,9 +259,6 @@ bool init_config_radio(radio *radio_h, const char *ini_name)
     b = iniparser_getboolean(ini, "main:enable_websocket", 0);
     radio_h->enable_websocket = (bool) b;
 
-    s = iniparser_getstring(ini, "main:websocket_bind", "0.0.0.0:8080");
-    snprintf(radio_h->websocket_bind, sizeof(radio_h->websocket_bind), "%s", s);
-
     b = iniparser_getboolean(ini, "main:enable_audio_bridge", 0);
     radio_h->enable_audio_bridge = (bool) b;
 

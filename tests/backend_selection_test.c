@@ -79,7 +79,6 @@ static void test_backend_configure_and_run_dispatch(void)
     radio_daemon_runtime runtime = {
         .cfg_radio_path = "radio.ini",
         .cfg_user_path = "user.ini",
-        .cpu_arg_provided = true,
         .cpu_nr = 3,
     };
     radio radio_h;

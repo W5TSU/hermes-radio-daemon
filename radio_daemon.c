@@ -49,7 +49,6 @@ int main(int argc, char *argv[])
     const char *cfg_radio_path = CFG_RADIO_PATH;
     const char *cfg_user_path  = CFG_USER_PATH;
     int cpu_nr = -1; /* -1 = no pinning */
-    bool cpu_arg_provided = false;
     radio_backend_selection backend_selection;
     radio_daemon_runtime runtime;
 
@@ -66,7 +65,6 @@ int main(int argc, char *argv[])
             break;
         case 'c':
             cpu_nr = atoi(optarg);
-            cpu_arg_provided = true;
             break;
         case 'h':
         default:
@@ -83,7 +81,6 @@ int main(int argc, char *argv[])
 
     runtime.cfg_radio_path = cfg_radio_path;
     runtime.cfg_user_path = cfg_user_path;
-    runtime.cpu_arg_provided = cpu_arg_provided;
     runtime.cpu_nr = cpu_nr;
 
     return radio_backend_run(&backend_selection, &runtime);

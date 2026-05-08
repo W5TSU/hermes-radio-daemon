@@ -33,7 +33,7 @@
 #include "sbitx_alsa.h"
 #include "sbitx_dsp.h"
 #include "sbitx_buffer.h"
-#include "../hamlib/radio_media.h"
+#include "../radio_media.h"
 
 char *radio_capture_dev = "hw:0,0";
 char *radio_playback_dev = "hw:0,0";

@@ -17,7 +17,7 @@
 typedef struct {
     const char *cfg_radio_path;
     const char *cfg_user_path;
-    bool cpu_arg_provided;
+    /* CPU pinning: -1 = no pin, otherwise pin to that CPU. */
     int cpu_nr;
 } radio_daemon_runtime;
 

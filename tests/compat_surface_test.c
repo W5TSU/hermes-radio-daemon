@@ -19,7 +19,7 @@
 #include <unistd.h>
 
 #include "radio.h"
-#include "hamlib/radio_pipeline.h"
+#include "radio_pipeline.h"
 #include "include/radio_cmds.h"
 #include "include/sbitx_io.h"
 
@@ -100,7 +100,7 @@ bool shm_destroy(key_t k, size_t s)    { (void) k; (void) s; return true; }
 void *shm_attach(key_t k, size_t s)
 { static controller_conn connector; (void) k; (void) s; return &connector; }
 
-#include "../hamlib/radio_pipeline.c"
+#include "../radio_pipeline.c"
 #include "../radio_shm.c"
 
 static void reset_backend_call(void)
