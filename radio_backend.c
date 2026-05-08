@@ -11,54 +11,24 @@
 
 #include "cfg_utils.h"
 #include "radio_backend.h"
-#include "hamlib/radio_hamlib.h"
 #include "hamlib/radio_daemon_core.h"
-#include "sbitx_bootstrap.h"
 
-static int launch_hfsignals_backend(const radio_daemon_runtime *runtime)
-{
-    return sbitx_bootstrap(runtime->cfg_radio_path,
-                           runtime->cfg_user_path,
-                           runtime->cpu_arg_provided,
-                           runtime->cpu_nr);
-}
+/* Timer reset flag — defined by hamlib/radio_hamlib.c (used only by hamlib's
+ * profile-timeout io thread; harmless when hfsignals backend is selected). */
+extern _Atomic bool timer_reset;
 
-static const radio_backend_ops hamlib_backend_ops = {
-    .name = "hamlib",
-    .launches_embedded = false,
-    .launch = NULL,
-    .init = radio_hamlib_init,
-    .shutdown = radio_hamlib_shutdown,
-    .io_thread = radio_io_thread,
-    .set_frequency = set_frequency,
-    .set_mode = set_mode,
-    .set_txrx_state = tr_switch,
-    .set_bfo = set_bfo,
-    .set_reflected_threshold = set_reflected_threshold,
-    .set_speaker_volume = set_speaker_volume,
-    .set_serial = set_serial,
-    .set_profile_timeout = set_profile_timeout,
-    .set_power_level = set_power_knob,
-    .set_digital_voice = set_digital_voice,
-    .set_step_size = set_step_size,
-    .set_tone_generation = set_tone_generation,
-    .set_profile = set_profile,
-    .get_fwd_power = get_fwd_power,
-    .get_swr = get_swr,
-};
-
-static const radio_backend_ops hfsignals_backend_ops = {
-    .name = "hfsignals",
-    .launches_embedded = true,
-    .launch = launch_hfsignals_backend,
-};
+/* Each backend TU defines its own const radio_backend_ops; we just pick one
+ * here based on the radio_backend kind from cfg. No backend-implementation
+ * function is exposed by name — the vtable is the only contract. */
+extern const radio_backend_ops hamlib_backend_ops;
+extern const radio_backend_ops sbitx_backend_ops;
 
 static const radio_backend_ops *radio_backend_ops_for_kind(radio_backend_kind kind)
 {
     switch (kind)
     {
     case RADIO_BACKEND_HFSIGNALS:
-        return &hfsignals_backend_ops;
+        return &sbitx_backend_ops;
     case RADIO_BACKEND_HAMLIB:
     default:
         return &hamlib_backend_ops;
@@ -99,9 +69,9 @@ int radio_backend_run(const radio_backend_selection *selection,
     if (!selection || !selection->ops || !runtime)
         return -1;
 
-    if (selection->ops->launches_embedded)
-        return selection->ops->launch(runtime);
-
+    /* Both backends now run through the same daemon-core loop. The
+     * backend's init op handles backend-specific bring-up
+     * (hamlib_init / sbitx hw_init+dsp_init+sound_system_init). */
     return radio_daemon_core_run(selection, runtime);
 }
 

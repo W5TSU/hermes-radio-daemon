@@ -34,14 +34,17 @@
 
 #include "radio.h"
 #include "radio_hamlib.h"
-#include "cfg_utils.h"
 #include "radio_pipeline.h"
+#include "cfg_utils.h"
+#include "radio_backend.h"
 
 _Atomic bool timer_reset = true;
 _Atomic time_t timeout_counter = 0;
 
 static rmode_t mode_to_hamlib(uint16_t mode);
 static uint16_t hamlib_to_mode(rmode_t hmode);
+static void wait_next_activation(void);
+static int  start_periodic_timer(uint64_t offset_us);
 
 static void hamlib_copy_path(char *dst, size_t dst_len, const char *src)
 {
@@ -292,7 +295,7 @@ static const char *mode_to_string(uint16_t mode)
     }
 }
 
-bool radio_hamlib_init(radio *radio_h)
+static bool radio_hamlib_init(radio *radio_h)
 {
     RIG *rig;
 
@@ -346,7 +349,7 @@ bool radio_hamlib_init(radio *radio_h)
     return true;
 }
 
-void radio_hamlib_shutdown(radio *radio_h)
+static void radio_hamlib_shutdown(radio *radio_h)
 {
     if (!radio_h->rig)
         return;
@@ -362,7 +365,7 @@ void radio_hamlib_shutdown(radio *radio_h)
     radio_h->rig = NULL;
 }
 
-void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
+static void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
 {
     if (profile >= radio_h->profiles_count)
         return;
@@ -392,7 +395,7 @@ void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
+static void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
 {
     if (profile >= radio_h->profiles_count)
         return;
@@ -421,7 +424,7 @@ void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void tr_switch(radio *radio_h, bool txrx_state)
+static void tr_switch(radio *radio_h, bool txrx_state)
 {
     if (txrx_state == radio_h->txrx_state)
         return;
@@ -454,7 +457,7 @@ void tr_switch(radio *radio_h, bool txrx_state)
     radio_h->txrx_state = txrx_state;
 }
 
-void set_bfo(radio *radio_h, uint32_t frequency)
+static void set_bfo(radio *radio_h, uint32_t frequency)
 {
     /* BFO is an sBitx-specific oscillator – no-op for Hamlib radios.
      * We keep the value in the config for API compatibility. */
@@ -469,7 +472,7 @@ void set_bfo(radio *radio_h, uint32_t frequency)
     radio_h->cfg_radio_dirty = true;
 }
 
-void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
+static void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
 {
     if (ref_threshold == radio_h->reflected_threshold)
         return;
@@ -482,7 +485,7 @@ void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
     radio_h->cfg_radio_dirty = true;
 }
 
-void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile)
+static void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile)
 {
     if (profile >= radio_h->profiles_count)
         return;
@@ -497,7 +500,7 @@ void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile
     radio_h->cfg_user_dirty = true;
 }
 
-void set_serial(radio *radio_h, uint32_t serial)
+static void set_serial(radio *radio_h, uint32_t serial)
 {
     if (serial == radio_h->serial_number)
         return;
@@ -510,7 +513,7 @@ void set_serial(radio *radio_h, uint32_t serial)
     radio_h->cfg_radio_dirty = true;
 }
 
-void set_profile_timeout(radio *radio_h, int32_t timeout)
+static void set_profile_timeout(radio *radio_h, int32_t timeout)
 {
     if (timeout == radio_h->profile_timeout)
         return;
@@ -524,7 +527,7 @@ void set_profile_timeout(radio *radio_h, int32_t timeout)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
+static void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
 {
     if (profile >= radio_h->profiles_count)
         return;
@@ -551,7 +554,7 @@ void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
+static void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
 {
     if (profile >= radio_h->profiles_count)
         return;
@@ -567,7 +570,7 @@ void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_step_size(radio *radio_h, uint32_t step_size)
+static void set_step_size(radio *radio_h, uint32_t step_size)
 {
     if (radio_h->step_size == step_size)
         return;
@@ -580,7 +583,7 @@ void set_step_size(radio *radio_h, uint32_t step_size)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_tone_generation(radio *radio_h, bool tone_generation)
+static void set_tone_generation(radio *radio_h, bool tone_generation)
 {
     if (radio_h->tone_generation == tone_generation)
         return;
@@ -592,7 +595,7 @@ void set_tone_generation(radio *radio_h, bool tone_generation)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_profile(radio *radio_h, uint32_t profile)
+static void set_profile(radio *radio_h, uint32_t profile)
 {
     if (radio_h->profile_active_idx == profile)
         return;
@@ -611,7 +614,7 @@ void set_profile(radio *radio_h, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-uint32_t get_fwd_power(radio *radio_h)
+static uint32_t get_fwd_power(radio *radio_h)
 {
     if (!radio_h->rig)
         return radio_h->fwd_power;
@@ -621,13 +624,13 @@ uint32_t get_fwd_power(radio *radio_h)
     return radio_h->fwd_power;
 }
 
-uint32_t get_ref_power(radio *radio_h)
+static uint32_t get_ref_power(radio *radio_h)
 {
     hamlib_update_measurements(radio_h);
     return radio_h->ref_power;
 }
 
-uint32_t get_swr(radio *radio_h)
+static uint32_t get_swr(radio *radio_h)
 {
     if (!radio_h->rig)
         return 10; /* 1.0 SWR */
@@ -654,12 +657,12 @@ uint32_t get_swr(radio *radio_h)
     return (10 * (vfwd + vref)) / (vfwd - vref);
 }
 
-bool update_power_measurements(radio *radio_h)
+static bool update_power_measurements(radio *radio_h)
 {
     return hamlib_update_measurements(radio_h);
 }
 
-void swr_protection_check(radio *radio_h)
+static void swr_protection_check(radio *radio_h)
 {
     if (radio_h->reflected_threshold == 0)
         return;
@@ -682,7 +685,7 @@ void swr_protection_check(radio *radio_h)
     }
 }
 
-void *radio_io_thread(void *radio_h_v)
+static void *radio_io_thread(void *radio_h_v)
 {
     radio *radio_h = (radio *) radio_h_v;
 
@@ -764,16 +767,38 @@ static inline void timespec_add_us(struct timespec *t, uint64_t us)
     t->tv_nsec %= (long) NSEC_PER_SEC;
 }
 
-void wait_next_activation(void)
+static void wait_next_activation(void)
 {
     clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &timer_next, NULL);
     timespec_add_us(&timer_next, timer_period_us);
 }
 
-int start_periodic_timer(uint64_t offset_us)
+static int start_periodic_timer(uint64_t offset_us)
 {
     clock_gettime(CLOCK_REALTIME, &timer_next);
     timespec_add_us(&timer_next, offset_us);
     timer_period_us = offset_us;
     return 0;
 }
+
+const radio_backend_ops hamlib_backend_ops = {
+    .name                    = "hamlib",
+    .init                    = radio_hamlib_init,
+    .shutdown                = radio_hamlib_shutdown,
+    .io_thread               = radio_io_thread,
+    .set_frequency           = set_frequency,
+    .set_mode                = set_mode,
+    .set_txrx_state          = tr_switch,
+    .set_bfo                 = set_bfo,
+    .set_reflected_threshold = set_reflected_threshold,
+    .set_speaker_volume      = set_speaker_volume,
+    .set_serial              = set_serial,
+    .set_profile_timeout     = set_profile_timeout,
+    .set_power_level         = set_power_knob,
+    .set_digital_voice       = set_digital_voice,
+    .set_step_size           = set_step_size,
+    .set_tone_generation     = set_tone_generation,
+    .set_profile             = set_profile,
+    .get_fwd_power           = get_fwd_power,
+    .get_swr                 = get_swr,
+};

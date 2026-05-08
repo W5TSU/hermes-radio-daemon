@@ -46,29 +46,14 @@ void lpf_set(radio *radio_h);
 void wait_next_activation(void);
 int  start_periodic_timer(uint64_t offset);
 
-/* Backend implementation entry points. These will be marked static + exposed
- * only via sbitx_backend_ops in a follow-up commit; for now they are
- * extern so the embedded sbitx_shm.c / sbitx_websocket.c (also slated for
- * deletion) can link against them. */
-void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile);
-void set_mode(radio *radio_h, uint16_t mode, uint32_t profile);
-void set_bfo(radio *radio_h, uint32_t frequency);
-void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold);
-void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile);
-void set_profile(radio *radio_h, uint32_t profile);
-void set_serial(radio *radio_h, uint32_t serial);
-void set_profile_timeout(radio *radio_h, int32_t timeout);
-void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile);
-void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile);
-void tr_switch(radio *radio_h, bool txrx_state);
-bool update_power_measurements(radio *radio_h);
-uint32_t get_fwd_power(radio *radio_h);
+/* Cross-TU helpers used by hw_thread / dsp / alsa. The backend ops
+ * (set_frequency, get_fwd_power, ...) are file-local statics in
+ * sbitx_core.c — reachable only via sbitx_backend_ops below. */
+bool     update_power_measurements(radio *radio_h);
 uint32_t get_ref_power(radio *radio_h);
-uint32_t get_swr(radio *radio_h);
-void swr_protection_check(radio *radio_h);
+void     swr_protection_check(radio *radio_h);
 
-/* Backend vtable exposed by sbitx_core.c. The struct definition lives in
- * radio_backend.h; here it's a forward decl so we don't need that header. */
+/* Backend vtable exposed by sbitx_core.c. */
 struct radio_backend_ops;
 extern const struct radio_backend_ops sbitx_backend_ops;
 

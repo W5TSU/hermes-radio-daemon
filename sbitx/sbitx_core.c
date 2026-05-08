@@ -30,21 +30,31 @@
 #include <errno.h>
 
 #include "cfg_utils.h"
-#include "sbitx_shm.h"
 #include "sbitx_core.h"
 #include "sbitx_i2c.h"
 #include "sbitx_gpio.h"
 #include "sbitx_si5351.h"
 #include "sbitx_alsa.h"
 #include "sbitx_dsp.h"
+#include "../radio_backend.h"
 
 extern _Atomic bool shutdown_;
 extern _Atomic bool tx_starting;
 extern _Atomic bool rx_starting;
 
 
-_Atomic bool timer_reset = true; // TODO: move me to global
-_Atomic time_t timeout_counter = 0;
+/* sbitx-side profile-fallback timer state. The hamlib backend has its own
+ * sbitx_timer_reset / sbitx_timeout_counter — both are file-local statics so they don't
+ * collide at link time. */
+static _Atomic bool   sbitx_timer_reset    = true;
+static _Atomic time_t sbitx_timeout_counter = 0;
+
+/* Forward declarations for the file-local backend ops used by other backend
+ * functions in this TU (e.g. set_profile calls set_frequency / set_mode,
+ * swr_protection_check calls tr_switch). */
+static void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile);
+static void set_mode(radio *radio_h, uint16_t mode, uint32_t profile);
+static void tr_switch(radio *radio_h, bool txrx_state);
 
 void radio_apply_defaults(radio *radio_h)
 {
@@ -138,7 +148,7 @@ bool update_power_measurements(radio *radio_h)
 }
 
 // returns power * 10
-uint32_t get_fwd_power(radio *radio_h)
+static uint32_t get_fwd_power(radio *radio_h)
 {
     // 40 should be we are using 40W as end of scale
     uint32_t fwdvoltage =  (radio_h->fwd_power * 40) / radio_h->bridge_compensation;
@@ -156,7 +166,7 @@ uint32_t get_ref_power(radio *radio_h)
 
 }
 
-uint32_t get_swr(radio *radio_h)
+static uint32_t get_swr(radio *radio_h)
 {
     uint32_t vfwd = radio_h->fwd_power;
     uint32_t vref = radio_h->ref_power;
@@ -174,7 +184,7 @@ uint32_t get_swr(radio *radio_h)
     return vswr;
 }
 
-void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
+static void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
 {
     if (ref_threshold == radio_h->reflected_threshold)
         return;
@@ -190,7 +200,7 @@ void set_reflected_threshold(radio *radio_h, uint32_t ref_threshold)
     radio_h->cfg_radio_dirty = true;
 }
 
-void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
+static void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
 {
     if (profile > radio_h->profiles_count)
     {
@@ -220,7 +230,7 @@ void set_power_knob(radio *radio_h, uint16_t power_level, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
+static void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
 {
     if (profile > radio_h->profiles_count)
     {
@@ -245,7 +255,7 @@ void set_digital_voice(radio *radio_h, bool digital_voice, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_profile(radio *radio_h, uint32_t profile)
+static void set_profile(radio *radio_h, uint32_t profile)
 {
     if (radio_h->profile_active_idx == profile)
         return;
@@ -283,7 +293,7 @@ void set_profile(radio *radio_h, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile)
+static void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile)
 {
     _Atomic uint32_t *volume = &radio_h->profiles[profile].speaker_level;
 
@@ -307,7 +317,7 @@ void set_speaker_volume(radio *radio_h, uint32_t speaker_level, uint32_t profile
     radio_h->cfg_user_dirty = true;
 }
 
-void set_serial(radio *radio_h, uint32_t serial)
+static void set_serial(radio *radio_h, uint32_t serial)
 {
     if (serial == radio_h->serial_number)
         return;
@@ -323,7 +333,7 @@ void set_serial(radio *radio_h, uint32_t serial)
     radio_h->cfg_radio_dirty = true;
 }
 
-void set_profile_timeout(radio *radio_h, int32_t timeout)
+static void set_profile_timeout(radio *radio_h, int32_t timeout)
 {
     if (timeout == radio_h->profile_timeout)
         return;
@@ -339,7 +349,7 @@ void set_profile_timeout(radio *radio_h, int32_t timeout)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
+static void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
 {
     _Atomic uint32_t *radio_freq = &radio_h->profiles[profile].freq;
 
@@ -369,7 +379,7 @@ void set_frequency(radio *radio_h, uint32_t frequency, uint32_t profile)
     radio_h->cfg_user_dirty = true;
 }
 
-void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
+static void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
 {
     _Atomic uint16_t *radio_mode = &radio_h->profiles[profile].mode;
 
@@ -399,7 +409,7 @@ void set_mode(radio *radio_h, uint16_t mode, uint32_t profile)
 }
 
 
-void set_bfo(radio *radio_h, uint32_t frequency)
+static void set_bfo(radio *radio_h, uint32_t frequency)
 {
     if (frequency == radio_h->bfo_frequency)
         return;
@@ -468,7 +478,7 @@ void swr_protection_check(radio *radio_h)
 }
 
 // TODO: all DSP and ALSA calls here or tr_switch? or not? lets keep things separate?
-void tr_switch(radio *radio_h, bool txrx_state)
+static void tr_switch(radio *radio_h, bool txrx_state)
 {
     if (txrx_state == radio_h->txrx_state)
         return;
@@ -567,7 +577,7 @@ void io_tick(radio *radio_h)
             else
                 tr_switch(radio_h, IN_RX);
 
-            timer_reset = true; // reset the profile timer
+            sbitx_timer_reset = true; // reset the profile timer
         }
         last_key_state = radio_h->key_down;
     }
@@ -592,7 +602,7 @@ void io_tick(radio *radio_h)
             }
             set_frequency(radio_h, freq, radio_h->profile_active_idx);
             set_dirty_ws = true;
-            timer_reset = true; // reset the profile timer
+            sbitx_timer_reset = true; // reset the profile timer
         }
         else
         {
@@ -625,7 +635,7 @@ void io_tick(radio *radio_h)
             }
             set_speaker_volume(radio_h, volume, radio_h->profile_active_idx);
             set_dirty_ws = true;
-            timer_reset = true; // reset the profile timer
+            sbitx_timer_reset = true; // reset the profile timer
         }
         else
         {
@@ -676,11 +686,11 @@ void io_tick(radio *radio_h)
     if ( (radio_h->profile_default_idx != radio_h->profile_active_idx) &&
          (radio_h->profile_timeout >= 0) )
     {
-        if (timer_reset)
+        if (sbitx_timer_reset)
         {
             last_time = time(NULL);
-            timer_reset = false;
-            timeout_counter = radio_h->profile_timeout;
+            sbitx_timer_reset = false;
+            sbitx_timeout_counter = radio_h->profile_timeout;
         }
         else
         {
@@ -688,20 +698,20 @@ void io_tick(radio *radio_h)
 
             if (curr_time > last_time)
             {
-                timeout_counter -= curr_time - last_time;
+                sbitx_timeout_counter -= curr_time - last_time;
                 last_time = curr_time;
-                if (timeout_counter <= 0)
+                if (sbitx_timeout_counter <= 0)
                 {
                     set_profile(radio_h, radio_h->profile_default_idx);
-                    timer_reset = true;
+                    sbitx_timer_reset = true;
                 }
             }
         }
     }
     else
     {
-        timer_reset = true;
-        timeout_counter = radio_h->profile_timeout;
+        sbitx_timer_reset = true;
+        sbitx_timeout_counter = radio_h->profile_timeout;
     }
 
 }
@@ -735,3 +745,136 @@ int start_periodic_timer(uint64_t offset)
 
     return 0;
 }
+
+/* ─────────────────────── hfsignals backend ops ─────────────────────────
+ *
+ * The embedded sBitx is no longer a separate program with its own main();
+ * its hardware/DSP/ALSA/IO threads run inside the unified daemon, behind
+ * the radio_backend_ops vtable. The state below holds the thread IDs we
+ * need to join on shutdown. */
+
+static pthread_t hfs_hw_tids[2];
+static pthread_t hfs_control_tid;
+static pthread_t hfs_radio_capture_tid;
+static pthread_t hfs_radio_playback_tid;
+static pthread_t hfs_loop_capture_tid;
+static pthread_t hfs_loop_playback_tid;
+static bool      hfs_audio_bridge_started = false;
+static bool      hfs_dsp_started          = false;
+static bool      hfs_sound_started        = false;
+static bool      hfs_hw_started           = false;
+
+static bool sbitx_op_init(radio *radio_h)
+{
+    radio_apply_defaults(radio_h);
+
+    if (radio_h->enable_audio_bridge)
+    {
+        if (!sbitx_bridge_init(radio_h))
+        {
+            fprintf(stderr, "sbitx_op_init: sbitx_bridge_init failed\n");
+            return false;
+        }
+        hfs_audio_bridge_started = true;
+    }
+
+    if (!hw_init(radio_h, hfs_hw_tids))
+    {
+        fprintf(stderr, "sbitx_op_init: hw_init failed\n");
+        return false;
+    }
+    hfs_hw_started = true;
+
+    dsp_init(radio_h);
+    hfs_dsp_started = true;
+
+    sound_system_init(radio_h,
+                      &hfs_control_tid,
+                      &hfs_radio_capture_tid,
+                      &hfs_radio_playback_tid,
+                      &hfs_loop_capture_tid,
+                      &hfs_loop_playback_tid);
+    hfs_sound_started = true;
+
+    return true;
+}
+
+static void *sbitx_op_io_thread(void *radio_h_v)
+{
+    radio *radio_h = (radio *) radio_h_v;
+    /* Block until the hardware threads exit (which happens when shutdown_
+     * is set). hw_shutdown does the pthread_join. */
+    if (hfs_hw_started)
+        hw_shutdown(radio_h, hfs_hw_tids);
+    hfs_hw_started = false;
+    return NULL;
+}
+
+static void sbitx_op_shutdown(radio *radio_h)
+{
+    if (hfs_sound_started)
+    {
+        sound_system_shutdown(radio_h,
+                              &hfs_control_tid,
+                              &hfs_radio_capture_tid,
+                              &hfs_radio_playback_tid,
+                              &hfs_loop_capture_tid,
+                              &hfs_loop_playback_tid);
+        hfs_sound_started = false;
+    }
+    if (hfs_dsp_started)
+    {
+        dsp_free(radio_h);
+        hfs_dsp_started = false;
+    }
+    if (hfs_audio_bridge_started)
+    {
+        sbitx_bridge_shutdown(radio_h);
+        hfs_audio_bridge_started = false;
+    }
+}
+
+/* set_step_size / set_tone_generation: the hardware reads these atomic
+ * fields directly, so the backend op just writes the field and persists. */
+static void sbitx_set_step_size(radio *radio_h, uint32_t step_size)
+{
+    if (radio_h->step_size == step_size)
+        return;
+    radio_h->step_size = step_size;
+    char val[32];
+    snprintf(val, sizeof(val), "%u", step_size);
+    cfg_set(radio_h, radio_h->cfg_user, "main:step_size", val);
+    radio_h->cfg_user_dirty = true;
+}
+
+static void sbitx_set_tone_generation(radio *radio_h, bool tone_generation)
+{
+    if (radio_h->tone_generation == tone_generation)
+        return;
+    radio_h->tone_generation = tone_generation;
+    cfg_set(radio_h, radio_h->cfg_user, "main:tone_generation",
+            tone_generation ? "1" : "0");
+    radio_h->cfg_user_dirty = true;
+}
+
+const radio_backend_ops sbitx_backend_ops = {
+    .name                    = "hfsignals",
+    .init                    = sbitx_op_init,
+    .shutdown                = sbitx_op_shutdown,
+    .io_thread               = sbitx_op_io_thread,
+    .set_frequency           = set_frequency,
+    .set_mode                = set_mode,
+    .set_txrx_state          = tr_switch,
+    .set_bfo                 = set_bfo,
+    .set_reflected_threshold = set_reflected_threshold,
+    .set_speaker_volume      = set_speaker_volume,
+    .set_serial              = set_serial,
+    .set_profile_timeout     = set_profile_timeout,
+    .set_power_level         = set_power_knob,
+    .set_digital_voice       = set_digital_voice,
+    .set_step_size           = sbitx_set_step_size,
+    .set_tone_generation     = sbitx_set_tone_generation,
+    .set_profile             = set_profile,
+    .get_fwd_power           = get_fwd_power,
+    .get_swr                 = get_swr,
+};

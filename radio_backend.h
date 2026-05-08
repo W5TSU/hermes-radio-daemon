@@ -23,8 +23,6 @@ typedef struct {
 
 typedef struct radio_backend_ops {
     const char *name;
-    bool launches_embedded;
-    int (*launch)(const radio_daemon_runtime *runtime);
     bool (*init)(radio *radio_h);
     void (*shutdown)(radio *radio_h);
     void *(*io_thread)(void *radio_h_v);

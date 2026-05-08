@@ -140,6 +140,7 @@ bool cfg_init(radio *radio_h, const char *cfg_radio, const char *cfg_user,
               pthread_t *config_tid)
 {
     pthread_mutex_init(&radio_h->cfg_mutex, NULL);
+    digi_tx_queue_init(&radio_h->digi_tx);
     snprintf(radio_h->cfg_radio_path, sizeof(radio_h->cfg_radio_path), "%s", cfg_radio);
     snprintf(radio_h->cfg_user_path, sizeof(radio_h->cfg_user_path), "%s", cfg_user);
 
@@ -172,6 +173,7 @@ bool cfg_shutdown(radio *radio_h, pthread_t *config_tid)
 
     close_config_radio(radio_h);
     close_config_user(radio_h);
+    digi_tx_queue_destroy(&radio_h->digi_tx);
 
     return true;
 }
@@ -292,6 +294,48 @@ bool init_config_radio(radio *radio_h, const char *ini_name)
     s = iniparser_getstring(ini, "main:recording_dir", "/var/lib/hermes-radio-daemon");
     snprintf(radio_h->recording_dir, sizeof(radio_h->recording_dir), "%s", s);
 
+    /* websocket_url: full mongoose listener URL. Default = plaintext WS on
+     * 0.0.0.0:8080. Use wss://host:port to terminate TLS using
+     * CFG_SSL_CERT / CFG_SSL_KEY. */
+    s = iniparser_getstring(ini, "main:websocket_url", "ws://0.0.0.0:8080");
+    snprintf(radio_h->websocket_url, sizeof(radio_h->websocket_url), "%s", s);
+
+    /* ── sbitx hardware-only knobs (ignored by hamlib backend) ──── */
+    s = iniparser_getstring(ini, "main:hw_profile", NULL);
+    radio_h->hw_profile = HW_PROFILE_UNKNOWN;
+    if (s)
+    {
+        if (!strcasecmp(s, "zbitx"))      radio_h->hw_profile = HW_PROFILE_ZBITX;
+        else if (!strcasecmp(s, "sbitx")) radio_h->hw_profile = HW_PROFILE_SBITX;
+    }
+
+    i = iniparser_getint(ini, "main:bridge_compensation", 100);
+    radio_h->bridge_compensation = (uint32_t) i;
+
+    s = iniparser_getstring(ini, "main:i2c_dev", "");
+    snprintf(radio_h->i2c_device, sizeof(radio_h->i2c_device), "%s", s);
+
+    s = iniparser_getstring(ini, "main:dream_path", "/usr/bin/dream");
+    snprintf(radio_h->dream_path, sizeof(radio_h->dream_path), "%s", s);
+
+    /* tx_band* sections — per-band TX power calibration (sbitx hardware) */
+    {
+        int sec_count = iniparser_getnsec(ini) - 1; /* minus [main] */
+        if (sec_count < 0) sec_count = 0;
+        if (sec_count > MAX_CAL_BANDS) sec_count = MAX_CAL_BANDS;
+        radio_h->band_power_count = (uint32_t) sec_count;
+        for (int k = 0; k < sec_count; k++)
+        {
+            char key[64];
+            snprintf(key, sizeof(key), "tx_band%d:f_start", k);
+            radio_h->band_power[k].f_start = iniparser_getint(ini, key, -1);
+            snprintf(key, sizeof(key), "tx_band%d:f_stop", k);
+            radio_h->band_power[k].f_stop = iniparser_getint(ini, key, -1);
+            snprintf(key, sizeof(key), "tx_band%d:scale", k);
+            radio_h->band_power[k].scale = iniparser_getdouble(ini, key, 1.0);
+        }
+    }
+
     return true;
 }
 
@@ -375,8 +419,47 @@ bool init_config_user(radio *radio_h, const char *ini_name)
             (!strcmp(s, "ON")) ? COMPRESSOR_ON : COMPRESSOR_OFF;
 
         snprintf(key, sizeof(key), "profile%d:digital_voice", k);
-        int b = iniparser_getboolean(ini, key, 0);
-        radio_h->profiles[k].digital_voice = (bool) b;
+        int b2 = iniparser_getboolean(ini, key, 0);
+        radio_h->profiles[k].digital_voice = (bool) b2;
+
+        /* sbitx-only profile knobs (ignored by hamlib backend) */
+        snprintf(key, sizeof(key), "profile%d:operating_mode", k);
+        radio_h->profiles[k].operating_mode = (uint16_t)
+            iniparser_getint(ini, key, OPERATING_MODE_FULL_VOICE);
+
+        snprintf(key, sizeof(key), "profile%d:mic_level", k);
+        radio_h->profiles[k].mic_level = (uint32_t) iniparser_getint(ini, key, 0);
+
+        snprintf(key, sizeof(key), "profile%d:rx_level", k);
+        radio_h->profiles[k].rx_level = (uint32_t) iniparser_getint(ini, key, 100);
+
+        snprintf(key, sizeof(key), "profile%d:tx_level", k);
+        radio_h->profiles[k].tx_level = (uint32_t) iniparser_getint(ini, key, 0);
+
+        snprintf(key, sizeof(key), "profile%d:bpf_low", k);
+        radio_h->profiles[k].bpf_low = (uint32_t) iniparser_getint(ini, key, 50);
+
+        snprintf(key, sizeof(key), "profile%d:bpf_high", k);
+        radio_h->profiles[k].bpf_high = (uint32_t) iniparser_getint(ini, key, 3000);
+
+        snprintf(key, sizeof(key), "profile%d:enable_knob_volume", k);
+        radio_h->profiles[k].enable_knob_volume = iniparser_getboolean(ini, key, 1);
+
+        snprintf(key, sizeof(key), "profile%d:enable_knob_frequency", k);
+        radio_h->profiles[k].enable_knob_frequency = iniparser_getboolean(ini, key, 1);
+
+        snprintf(key, sizeof(key), "profile%d:enable_ptt", k);
+        radio_h->profiles[k].enable_ptt = iniparser_getboolean(ini, key, 1);
+
+        snprintf(key, sizeof(key), "profile%d:tx_preemphasis", k);
+        s = iniparser_getstring(ini, key, "OFF");
+        radio_h->profiles[k].tx_preemphasis =
+            !strcasecmp(s, "ON") ? TX_PREEMPHASIS_ON : TX_PREEMPHASIS_OFF;
+
+        snprintf(key, sizeof(key), "profile%d:noise_reduction", k);
+        s = iniparser_getstring(ini, key, "OFF");
+        radio_h->profiles[k].noise_reduction =
+            !strcasecmp(s, "ON") ? NOISE_REDUCTION_ON : NOISE_REDUCTION_OFF;
     }
 
     if (radio_h->profile_active_idx >= radio_h->profiles_count)
@@ -446,5 +529,51 @@ bool close_config_user(radio *radio_h)
 {
     if (radio_h->cfg_user)
         iniparser_freedict(radio_h->cfg_user);
+    return true;
+}
+
+/* ───────────────────────────── digi_tx_queue ───────────────────────────── */
+
+void digi_tx_queue_init(digi_tx_queue *q)
+{
+    pthread_mutex_init(&q->mutex, NULL);
+    q->head = q->tail = q->count = 0;
+}
+
+void digi_tx_queue_destroy(digi_tx_queue *q)
+{
+    pthread_mutex_destroy(&q->mutex);
+}
+
+bool digi_tx_queue_push(digi_tx_queue *q, const char *text)
+{
+    if (!text || !text[0])
+        return false;
+
+    pthread_mutex_lock(&q->mutex);
+    if (q->count == DIGI_TX_QUEUE_DEPTH)
+    {
+        pthread_mutex_unlock(&q->mutex);
+        return false; /* queue full */
+    }
+    snprintf(q->msgs[q->tail], DIGI_TX_MSG_MAX, "%s", text);
+    q->tail = (q->tail + 1) % DIGI_TX_QUEUE_DEPTH;
+    q->count++;
+    pthread_mutex_unlock(&q->mutex);
+    return true;
+}
+
+bool digi_tx_queue_pop(digi_tx_queue *q, char *out, size_t out_len)
+{
+    pthread_mutex_lock(&q->mutex);
+    if (q->count == 0)
+    {
+        pthread_mutex_unlock(&q->mutex);
+        return false;
+    }
+    snprintf(out, out_len, "%s", q->msgs[q->head]);
+    q->head = (q->head + 1) % DIGI_TX_QUEUE_DEPTH;
+    q->count--;
+    pthread_mutex_unlock(&q->mutex);
     return true;
 }
